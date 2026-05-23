@@ -16,6 +16,9 @@ export default function Profile() {
   const [morningUpdatesEnabled, setMorningUpdatesEnabled] = useState(false);
 
   const handleLogout = () => {
+    sessionStorage.removeItem('isLoggedIn');
+    
+    console.log('User logged out');
     navigate('/login');
   };
 

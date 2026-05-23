@@ -6,19 +6,17 @@ export default function Login() {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   
-  // State untuk menangkap input user
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  // Validasi: tombol aktif HANYA jika email dan password tidak kosong
   const isFormValid = email.trim() !== '' && password.trim() !== '';
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (isFormValid) {
-      // Panggil API Login di sini nantinya
+      sessionStorage.setItem('isLoggedIn', 'true');
       console.log('Login berhasil:', email);
-      navigate('/'); // Pindah ke dashboard setelah login sukses
+      navigate('/'); 
     }
   };
 
@@ -69,16 +67,12 @@ export default function Login() {
           </button>
         </div>
 
-        <div className="flex justify-end w-full">
-          <Link to="/forgot-password" className="text-sm text-red-600 hover:underline">
-            Forgot password?
-          </Link>
-        </div>
+        {/* Tautan Forgot Password sudah dihapus dari sini */}
 
         <button
           type="submit"
           disabled={!isFormValid}
-          className={`w-full font-semibold py-3 rounded-xl transition duration-200 mt-2 ${
+          className={`w-full font-semibold py-3 rounded-xl transition duration-200 mt-6 ${
             isFormValid 
               ? 'bg-red-600 hover:bg-red-700 text-white' 
               : 'bg-red-400 text-white/70 cursor-not-allowed'
