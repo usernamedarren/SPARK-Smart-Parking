@@ -1,0 +1,50 @@
+# Node / Expo / Mobile
+node_modules/
+spark-mobile/node_modules/
+
+# Expo
+.expo/
+spark-mobile/.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native generated folders
+/ios
+/android
+spark-mobile/ios/
+spark-mobile/android/
+
+# Metro
+.metro-health-check*
+
+# debug logs
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+pnpm-debug.*
+
+# Local config / editor
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Certificates / keys
+*.pem
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# TypeScript
+*.tsbuildinfo
+
+# Misc
+*.orig.*
+app-example
