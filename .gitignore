@@ -48,3 +48,11 @@ Thumbs.db
 # Misc
 *.orig.*
 app-example
+
+# Python / Backend
+spark-backend/venv/
+spark-backend/.env
+spark-backend/yolov8n.pt
+spark-backend/static/
+**/__pycache__/
+*.pyc
