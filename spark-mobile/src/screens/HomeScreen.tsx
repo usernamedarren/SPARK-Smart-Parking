@@ -1,4 +1,4 @@
-import React from "react";
+import React, {useState} from "react";
 import {
   View,
   Text,
@@ -20,6 +20,23 @@ import { useNavigation } from "@react-navigation/native";
 
 export default function HomeScreen() {
 const navigation = useNavigation();
+const [searchText, setSearchText] =
+  useState("");
+
+const parkingLocations = [
+  "Labtek 5",
+  "Labtek 8",
+  "FSRD",
+];
+
+const filteredLocations =
+  parkingLocations.filter((item) =>
+    item
+      .toLowerCase()
+      .includes(
+        searchText.toLowerCase()
+      )
+  );
 
   return (
     <View style={styles.container}>
@@ -82,14 +99,35 @@ const navigation = useNavigation();
             placeholder="Search location (e.g., Library, GKU, Labtek)"
             placeholderTextColor="#9D9D9D"
             style={styles.input}
-          />
-
-          <Feather
-            name="sliders"
-            size={22}
-            color="#D92E3F"
+            value={searchText}
+            onChangeText={setSearchText}
           />
         </View>
+        {searchText.length > 0 && (
+          <View style={styles.searchResultBox}>
+            {filteredLocations.map(
+              (item, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.searchItem}
+                  onPress={() => {
+                    setSearchText("");
+
+                    navigation.navigate(
+                      "DetailParking" as never
+                    );
+                  }}
+                >
+                  <Text
+                    style={styles.searchItemText}
+                  >
+                    {item}
+                  </Text>
+                </TouchableOpacity>
+              )
+            )}
+          </View>
+        )}
 
         {/* AVAILABILITY CARD */}
         <View style={styles.availabilityCard}>
@@ -242,7 +280,8 @@ const navigation = useNavigation();
               🚶 3 min walk
             </Text>
 
-            <TouchableOpacity style={styles.detailBtn}>
+            <TouchableOpacity style={styles.detailBtn}
+              onPress={() => navigation.navigate("DetailParking" as never)}>
               <Text style={styles.detailText}>
                 View Details
               </Text>
@@ -274,7 +313,8 @@ const navigation = useNavigation();
               🚶 3 min walk
             </Text>
 
-            <TouchableOpacity style={styles.detailBtn}>
+            <TouchableOpacity style={styles.detailBtn}
+              onPress={() => navigation.navigate("DetailParking" as never)}>
               <Text style={styles.detailText}>
                 View Details
               </Text>
@@ -306,7 +346,8 @@ const navigation = useNavigation();
               🚶 3 min walk
             </Text>
 
-            <TouchableOpacity style={styles.detailBtn}>
+            <TouchableOpacity style={styles.detailBtn}
+              onPress={() => navigation.navigate("DetailParking" as never)}>
               <Text style={styles.detailText}>
                 View Details
               </Text>
@@ -315,7 +356,12 @@ const navigation = useNavigation();
 
         </View>
 
-        <TouchableOpacity style={styles.exploreButton}>
+        <TouchableOpacity 
+          style={styles.exploreButton}
+          onPress={() => 
+            navigation.navigate("Map" as never)
+          }
+        >
           <Ionicons
             name="location-outline"
             size={18}
@@ -395,16 +441,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 15,
+    paddingHorizontal: 14,
     marginTop: -100,
 
-    zIndex:999,
+    zIndex:1000,
     elevation: 5,
   },
 
   input: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 10,
     fontFamily: "PoppinsRegular",
     fontSize: 12,
   },
@@ -736,4 +782,37 @@ bottomNav: {
     paddingHorizontal: 24,
     paddingTop: 55,
   },
+
+  searchResultBox: {
+    position: "absolute",
+
+    top: 245, // atur posisi tepat bawah search bar
+    left: 24,
+    right: 24,
+
+    backgroundColor: "#FFF",
+    borderRadius: 18,
+
+    borderWidth: 1,
+    borderColor: "#F0D7D7",
+
+    elevation: 8,
+    zIndex: 9999,
+
+    overflow: "hidden",
+  },
+
+searchItem: {
+  paddingVertical: 12,
+  paddingHorizontal: 16,
+
+  borderBottomWidth: 1,
+  borderBottomColor: "#F5F5F5",
+},
+
+searchItemText: {
+  fontFamily: "PoppinsMedium",
+  fontSize: 13,
+  color: "#333",
+},
 });
