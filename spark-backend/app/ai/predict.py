@@ -27,7 +27,9 @@ SLOT_COORDINATES = {
     "slot_12": {"p1": (581, 499), "p2": (926, 645), "p3": (902, 766), "p4": (497, 609)},
 }
 
+
 def calculate_overlap(car_mask, slot_polygon, img_h, img_w) -> float:
+    """Calculate overlap ratio between a car mask and a slot polygon."""
     car_mask_img  = np.zeros((img_h, img_w), dtype=np.uint8)
     slot_mask_img = np.zeros((img_h, img_w), dtype=np.uint8)
 
@@ -49,7 +51,9 @@ def calculate_overlap(car_mask, slot_polygon, img_h, img_w) -> float:
 
     return float(intersection / min(car_area, slot_area))
 
+
 def calculate_iou_masks(mask1, mask2, img_h, img_w) -> float:
+    """Calculate IoU between 2 vehicle masks for NMS."""
     m1 = np.zeros((img_h, img_w), dtype=np.uint8)
     m2 = np.zeros((img_h, img_w), dtype=np.uint8)
     cv2.fillPoly(m1, [np.array(mask1, dtype=np.int32)], 1)
@@ -62,7 +66,12 @@ def calculate_iou_masks(mask1, mask2, img_h, img_w) -> float:
         return 0.0
     return float(intersection / union)
 
-def apply_nms(masks, confs, img_h, img_w, iou_threshold=0.3) -> list:
+
+def apply_nms(masks, confs, img_h, img_w, iou_threshold=NMS_IOU_THRESHOLD) -> list:
+    """
+    Remove duplicate detections using mask-based IoU.
+    Keep the detection with the highest confidence score.
+    """
     indices = sorted(range(len(confs)), key=lambda i: confs[i], reverse=True)
     kept    = []
     for i in indices:
@@ -75,12 +84,26 @@ def apply_nms(masks, confs, img_h, img_w, iou_threshold=0.3) -> list:
             kept.append(i)
     return kept
 
+
 def predict_parking(image_bytes: bytes) -> dict:
-    image   = Image.open(io.BytesIO(image_bytes))
-    results = model(image, conf=CONF_THRESHOLD)
+    """
+    Predict slot occupancy for CAM-TEST using custom YOLOv8-segmentation model.
+    Handles truncated/partial JPEG frames that may arrive from ESP32-CAM.
+    """
+    import PIL.ImageFile
+    PIL.ImageFile.LOAD_TRUNCATED_IMAGES = True  # Tolerate partial JPEG from ESP32
+
+    try:
+        image = Image.open(io.BytesIO(image_bytes))
+        image = image.convert("RGB")  # Ensures full decode + normalizes to RGB
+    except Exception as e:
+        raise ValueError(f"Cannot decode image bytes ({len(image_bytes)} bytes): {e}")
+
+    results = model(image, conf=CONF_THRESHOLD, verbose=False)
 
     img_h, img_w = results[0].orig_shape
 
+    # Extract masks and confidences from YOLO results
     masks = []
     confs = []
     if results[0].masks is not None:
@@ -88,8 +111,10 @@ def predict_parking(image_bytes: bytes) -> dict:
             masks.append(results[0].masks.xy[i])
             confs.append(float(results[0].boxes[i].conf))
 
+    # Apply NMS to remove duplicate detections
     valid_indices = apply_nms(masks, confs, img_h, img_w, NMS_IOU_THRESHOLD)
 
+    # Check which slots are occupied
     slot_status = {slot_id: "empty" for slot_id in SLOT_COORDINATES}
     for i in valid_indices:
         for slot_id, slot_box in SLOT_COORDINATES.items():
@@ -97,13 +122,18 @@ def predict_parking(image_bytes: bytes) -> dict:
             if overlap > OVERLAP_THRESHOLD:
                 slot_status[slot_id] = "occupied"
 
-    occupied = sum(1 for s in slot_status.values() if s == "occupied")
+    occupied = sum(1 for status in slot_status.values() if status == "occupied")
+
+    # Calculate average confidence of valid detections
+    avg_confidence = float(np.mean([confs[i] for i in valid_indices])) if valid_indices else 0.0
 
     return {
         "slot_status": slot_status,
         "summary": {
-            "total":    len(SLOT_COORDINATES),
-            "occupied": occupied,
-            "empty":    len(SLOT_COORDINATES) - occupied,
+            "total":             len(SLOT_COORDINATES),
+            "occupied":          occupied,
+            "empty":             len(SLOT_COORDINATES) - occupied,
+            "confidence_avg":    round(avg_confidence, 4),
+            "vehicles_detected": len(valid_indices)
         }
     }

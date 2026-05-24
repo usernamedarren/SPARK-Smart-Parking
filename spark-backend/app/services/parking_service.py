@@ -36,16 +36,26 @@ class ParkingService:
         return result.data or []
 
     async def get_area_by_camera(self, camera_device_id: str) -> Optional[dict]:
-        """Find a parking area by its camera device ID."""
+        """Find a parking area by its camera device ID. Returns None if not found."""
         admin = self._get_admin()
-        result = (
-            admin.table("parking_areas")
-            .select("*")
-            .eq("camera_device_id", camera_device_id)
-            .maybe_single()
-            .execute()
-        )
-        return result.data
+        try:
+            result = (
+                admin.table("parking_areas")
+                .select("*")
+                .eq("camera_device_id", camera_device_id)
+                .maybe_single()
+                .execute()
+            )
+            # execute() can return None when maybe_single finds no rows
+            if result is None:
+                return None
+            return result.data
+        except Exception as e:
+            # maybe_single() raises in some supabase-py versions when no row is found.
+            err_str = str(e).lower()
+            if "no rows" in err_str or "pgrst116" in err_str or "results contain 0 rows" in err_str:
+                return None
+            raise  # Re-raise genuine DB errors
 
     async def get_area_by_id(self, area_id: str) -> Optional[dict]:
         """Get a parking area by ID."""
