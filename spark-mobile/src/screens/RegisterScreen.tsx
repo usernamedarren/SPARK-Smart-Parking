@@ -224,6 +224,7 @@ export default function RegisterScreen() {
           </View>
 
           {/* ROLE */}
+          {/* ROLE */}
           <TouchableOpacity
             style={styles.inputContainer}
             onPress={() => setShowRoles(!showRoles)}
@@ -278,7 +279,6 @@ export default function RegisterScreen() {
               ))}
             </View>
           )}
-
           {/* BUTTON */}
           <TouchableOpacity
             style={[styles.signUpButton, loading && { opacity: 0.7 }]}
@@ -496,4 +496,31 @@ const styles = StyleSheet.create({
     fontFamily: "PoppinsBold",
     fontSize: 18,
   },
+  dropdownContainer: {
+  width: "100%",
+  backgroundColor: "#FFF",
+
+  borderWidth: 1.5,
+  borderColor: "#F0C8C8",
+
+  borderRadius: 18,
+  marginTop: -8,
+  marginBottom: 16,
+
+  overflow: "hidden",
+},
+
+dropdownItem: {
+  paddingVertical: 14,
+  paddingHorizontal: 20,
+
+  borderBottomWidth: 1,
+  borderBottomColor: "#F6E2E2",
+},
+
+dropdownText: {
+  fontFamily: "PoppinsMedium",
+  fontSize: 14,
+  color: "#444",
+},
 });

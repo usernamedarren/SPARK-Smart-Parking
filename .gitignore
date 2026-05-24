@@ -56,3 +56,9 @@ spark-backend/yolov8n.pt
 spark-backend/static/
 **/__pycache__/
 *.pyc
+
+spark-ai/datasets
+spark-ai/runs
+spark-ai/notebooks/eval_test
+
+esp32_captures
