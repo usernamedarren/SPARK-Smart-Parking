@@ -96,15 +96,9 @@ void initCamera() {
     config.grab_mode    = CAMERA_GRAB_LATEST;
     config.jpeg_quality = 10;
 
-    if (psramFound()) {
-        config.frame_size  = FRAMESIZE_SVGA;
-        config.fb_location = CAMERA_FB_IN_PSRAM;
-        config.fb_count    = 1;
-    } else {
-        config.frame_size  = FRAMESIZE_VGA;
-        config.fb_location = CAMERA_FB_IN_DRAM;
-        config.fb_count    = 1;
-    }
+    config.frame_size  = FRAMESIZE_VGA;
+    config.fb_location = CAMERA_FB_IN_PSRAM;
+    config.fb_count    = 1;
 
     esp_err_t err = esp_camera_init(&config);
     if (err != ESP_OK) {
