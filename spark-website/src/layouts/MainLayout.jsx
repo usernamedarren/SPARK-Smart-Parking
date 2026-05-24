@@ -3,6 +3,7 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Search, Home, Map as MapIcon, Video, Sparkles, User, Settings } from 'lucide-react';
 import sparkLogo from '../assets/logo.png'; 
 import bgInternal from '../assets/background-internal.jpg'; 
+import api from '../services/api';
 
 export default function MainLayout() {
   const location = useLocation();
@@ -11,6 +12,59 @@ export default function MainLayout() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef(null);
+
+  const [userData, setUserData] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('spark_user');
+      return savedUser ? JSON.parse(savedUser) : {
+        name: 'Andi Makmur',
+        role: 'mahasiswa'
+      };
+    } catch {
+      return {
+        name: 'Andi Makmur',
+        role: 'mahasiswa'
+      };
+    }
+  });
+
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        const res = await api.get('/user/profile');
+        setUserData(res.data);
+        localStorage.setItem('spark_user', JSON.stringify(res.data));
+      } catch (err) {
+        console.error('Error fetching profile in MainLayout:', err);
+      }
+    };
+
+    fetchUserProfile();
+
+    const handleProfileUpdate = () => {
+      try {
+        const savedUser = localStorage.getItem('spark_user');
+        if (savedUser) {
+          setUserData(JSON.parse(savedUser));
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    window.addEventListener('spark_user_updated', handleProfileUpdate);
+    return () => {
+      window.removeEventListener('spark_user_updated', handleProfileUpdate);
+    };
+  }, []);
+
+  const getRoleLabel = (role) => {
+    if (!role) return 'Mahasiswa';
+    const cleanRole = role.toLowerCase();
+    if (cleanRole === 'mahasiswa') return 'Mahasiswa';
+    if (cleanRole === 'tenaga_didik') return 'Tenaga Didik';
+    return role;
+  };
 
   const isProfilePage = location.pathname === '/profile';
 
@@ -125,8 +179,8 @@ export default function MainLayout() {
               <User size={20} />
             </div>
             <div className="text-left flex-1">
-              <p className="text-sm font-bold text-red-700 leading-tight">Andi Makmur</p>
-              <p className="text-xs text-red-700/70 font-medium">Student</p>
+              <p className="text-sm font-bold text-red-700 leading-tight">{userData.name}</p>
+              <p className="text-xs text-red-700/70 font-medium">{getRoleLabel(userData.role)}</p>
             </div>
           </button>
         </div>

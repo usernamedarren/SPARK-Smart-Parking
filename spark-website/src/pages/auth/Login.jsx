@@ -1,22 +1,39 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Mail, Lock, EyeOff, Eye, LogIn } from 'lucide-react';
+import api from '../../services/api';
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [showPassword, setShowPassword] = useState(false);
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const isFormValid = email.trim() !== '' && password.trim() !== '';
+  const successMsg = location.state?.successMsg;
+  const isFormValid = email.trim() !== '' && password.trim() !== '' && !loading;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (isFormValid) {
+    if (!isFormValid) return;
+
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      const res = await api.post('/auth/login', { email, password });
+      localStorage.setItem('spark_token', res.data.access_token);
+      localStorage.setItem('spark_user', JSON.stringify(res.data.user));
       sessionStorage.setItem('isLoggedIn', 'true');
       console.log('Login berhasil:', email);
       navigate('/'); 
+    } catch (err) {
+      console.error('Login gagal:', err);
+      setErrorMsg(err.response?.data?.detail || 'Invalid email or password. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -30,6 +47,12 @@ export default function Login() {
       <p className="text-sm text-red-800/70 text-center mb-8 px-4">
         Find available parking faster with real-time smart guidance
       </p>
+
+      {successMsg && (
+        <div className="w-full bg-[#E8F0E9] text-[#3A5A40] text-xs px-4 py-2.5 rounded-xl border border-[#A3B8A8] font-semibold mb-4 text-center">
+          {successMsg}
+        </div>
+      )}
 
       <form className="w-full space-y-4" onSubmit={handleSubmit}>
         <div className="relative">
@@ -67,7 +90,11 @@ export default function Login() {
           </button>
         </div>
 
-        {/* Tautan Forgot Password sudah dihapus dari sini */}
+        {errorMsg && (
+          <div className="bg-red-50 text-red-600 text-xs px-4 py-2.5 rounded-xl border border-red-100 font-semibold mb-2">
+            ⚠️ {errorMsg}
+          </div>
+        )}
 
         <button
           type="submit"

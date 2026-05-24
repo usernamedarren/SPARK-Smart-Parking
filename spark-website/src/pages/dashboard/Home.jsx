@@ -1,16 +1,78 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CampusMap from '../../components/CampusMap'; // Import komponen peta
+import api from '../../services/api';
+
+const nameMapping = {
+  'GKUT': 'GKU Timur Parking',
+  'GKUB': 'GKU Barat Parking',
+  'LABTEK 5': 'Labtek 5 Parking',
+  'LABTEK 8': 'Labtek 8 Parking',
+  'FSRD': 'FSRD Parking',
+  'GKU 1': 'GKU 1 Parking',
+  'GKU 2': 'GKU 2 Parking',
+  'GKU 3': 'GKU 3 Parking',
+  'REKTORAT': 'Rektorat Parking',
+};
+
+const walkMapping = {
+  'GKUT': '3 min walk',
+  'GKUB': '4 min walk',
+  'LABTEK 5': '2 min walk',
+  'LABTEK 8': '2 min walk',
+  'FSRD': '3 min walk',
+  'GKU 1': '4 min walk',
+  'GKU 2': '5 min walk',
+  'GKU 3': '4 min walk',
+  'REKTORAT': '6 min walk',
+};
 
 export default function Home() {
   const navigate = useNavigate();
   const [activeCampus, setActiveCampus] = useState('Ganesha');
+  const [areas, setAreas] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const parkingCards = [
-    { name: 'GKU Timur Parking', spots: 24, walk: '3 min walk' },
-    { name: 'Labtek 5 Parking', spots: 12, walk: '2 min walk' },
-    { name: 'GKU 1 Parking', spots: 18, walk: '4 min walk' },
-  ];
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const res = await api.get('/parking/status');
+        const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+        setAreas(data);
+      } catch (err) {
+        console.error('Gagal mengambil status parkir:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 15000); // Auto-refresh setiap 15 detik
+    return () => clearInterval(interval);
+  }, []);
+
+  // Filter area berdasarkan kampus terpilih
+  const campusAreas = areas.filter(area => {
+    const isJatinangor = area.latitude <= -6.92;
+    return activeCampus === 'Jatinangor' ? isJatinangor : !isJatinangor;
+  });
+
+  // Jika data masih loading atau gagal, gunakan dummy fallback
+  const displayAreas = campusAreas.length > 0 ? campusAreas : (
+    activeCampus === 'Ganesha' ? [
+      { name: 'LABTEK 5', available_slots: 12, total_slots: 20, status_label: 'available' },
+      { name: 'GKUT', available_slots: 24, total_slots: 30, status_label: 'available' },
+      { name: 'GKUB', available_slots: 18, total_slots: 25, status_label: 'available' },
+    ] : [
+      { name: 'GKU 1', available_slots: 22, total_slots: 40, status_label: 'available' },
+      { name: 'GKU 2', available_slots: 28, total_slots: 35, status_label: 'available' },
+      { name: 'GKU 3', available_slots: 31, total_slots: 45, status_label: 'available' },
+    ]
+  );
+
+  // Hitung persentase ketersediaan kampus secara dinamis
+  const totalSlots = displayAreas.reduce((acc, curr) => acc + (curr.total_slots || 0), 0);
+  const totalAvailable = displayAreas.reduce((acc, curr) => acc + (curr.available_slots || 0), 0);
+  const availabilityPercentage = totalSlots > 0 ? Math.round((totalAvailable / totalSlots) * 100) : 0;
 
   return (
     <div className="flex flex-col h-full gap-4">
@@ -20,38 +82,52 @@ export default function Home() {
           <div className="bg-red-600 text-white w-11 h-11 flex items-center justify-center rounded-xl font-bold text-lg shadow-xs">P</div>
           <div>
             <h2 className="text-sm font-bold text-gray-800">Parking Availability</h2>
-            <p className="text-[11px] text-gray-400">Updated just now</p>
+            <p className="text-[11px] text-gray-400">{loading ? 'Loading...' : 'Updated just now'}</p>
           </div>
           <div className="ml-4">
-            <h2 className="text-lg font-extrabold text-red-600">62%</h2>
+            <h2 className="text-lg font-extrabold text-red-600">{availabilityPercentage}%</h2>
             <p className="text-[11px] text-gray-400">Campus Availability</p>
           </div>
         </div>
 
         <div className="flex gap-4 overflow-x-auto pb-2">
-          {parkingCards.map((area, idx) => (
-            <div key={idx} className="min-w-[210px] border border-gray-100 rounded-2xl p-4 bg-white shadow-xs">
-              <div className="flex items-center gap-2.5 mb-2.5">
-                <div className="bg-[#3A5A40] text-white w-7 h-7 flex items-center justify-center rounded-lg font-bold text-xs">P</div>
-                <h3 className="font-bold text-gray-800 text-xs leading-tight">{area.name}</h3>
-              </div>
-              <div className="flex justify-between items-end mb-2 pb-2 border-b border-gray-100">
-                <span className="text-[9px] text-[#3A5A40] bg-[#E8F0E9] px-2 py-0.5 rounded font-bold uppercase">Available</span>
-                <div className="text-right leading-none">
-                  <span className="text-lg font-extrabold text-gray-800">{area.spots}</span>
-                  <span className="text-[10px] text-gray-400 ml-1">spots</span>
+          {displayAreas.map((area, idx) => {
+            const mappedName = nameMapping[area.name] || `${area.name} Parking`;
+            const walkTime = walkMapping[area.name] || '3 min walk';
+            const isFull = area.available_slots === 0 || area.status_label === 'full';
+            
+            return (
+              <div key={idx} className="min-w-[210px] border border-gray-100 rounded-2xl p-4 bg-white shadow-xs">
+                <div className="flex items-center gap-2.5 mb-2.5">
+                  <div className="bg-[#3A5A40] text-white w-7 h-7 flex items-center justify-center rounded-lg font-bold text-xs">P</div>
+                  <h3 className="font-bold text-gray-800 text-xs leading-tight">{mappedName}</h3>
                 </div>
+                <div className="flex justify-between items-end mb-2 pb-2 border-b border-gray-100">
+                  <span className={`text-[9px] px-2 py-0.5 rounded font-bold uppercase ${
+                    isFull ? 'text-red-600 bg-red-50' : 'text-[#3A5A40] bg-[#E8F0E9]'
+                  }`}>
+                    {isFull ? 'Full' : 'Available'}
+                  </span>
+                  <div className="text-right leading-none">
+                    <span className="text-lg font-extrabold text-gray-800">{area.available_slots}</span>
+                    <span className="text-[10px] text-gray-400 ml-1">/{area.total_slots}</span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-gray-500 font-medium mb-1">🚶 {walkTime}</p>
+                <p className={`text-[9px] font-bold flex items-center gap-1 mb-2 ${
+                  isFull ? 'text-red-600' : 'text-[#3A5A40]'
+                }`}>
+                  {isFull ? '❌ No spots left' : '✔️ Available on arrival'}
+                </p>
+                <button 
+                  onClick={() => navigate('/map', { state: { selectedLocation: area.name } })}
+                  className="w-full py-1.5 text-red-600 border border-red-100 rounded-lg text-[11px] font-bold hover:bg-red-50 transition"
+                >
+                  View Details
+                </button>
               </div>
-              <p className="text-[11px] text-gray-500 font-medium mb-1">🚶 {area.walk}</p>
-              <p className="text-[9px] text-[#3A5A40] font-bold flex items-center gap-1 mb-2">✔️ Available on arrival</p>
-              <button 
-                onClick={() => navigate('/map', { state: { selectedLocation: area.name.replace(' Parking', '') } })}
-                className="w-full py-1.5 text-red-600 border border-red-100 rounded-lg text-[11px] font-bold hover:bg-red-50 transition"
-              >
-                View Details
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

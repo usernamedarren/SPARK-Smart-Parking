@@ -6,8 +6,9 @@ Endpoints for user profile and notification preference management.
 
 import logging
 from fastapi import APIRouter, HTTPException, Depends
-from app.models.schemas import UserProfile, UserProfileUpdate, NotificationUpdate, MessageResponse
+from app.models.schemas import UserProfile, UserProfileUpdate, NotificationUpdate, MessageResponse, ChangePasswordRequest
 from app.dependencies import get_current_user, get_supabase_admin
+import hashlib
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -64,3 +65,28 @@ async def update_notifications(
     if result.data:
         return result.data[0]
     raise HTTPException(status_code=500, detail="Failed to update notification preference.")
+
+
+@router.put("/password", response_model=MessageResponse)
+async def change_password(
+    data: ChangePasswordRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Change the current user's password in Supabase Auth and update local password hash."""
+    admin = get_supabase_admin()
+
+    try:
+        # Step 1: Update password in Supabase Auth via Admin API
+        admin.auth.admin.update_user_by_id(
+            current_user["id"],
+            {"password": data.new_password}
+        )
+        
+        # Step 2: Update local password hash in the users table
+        new_hash = hashlib.sha256(data.new_password.encode()).hexdigest()
+        admin.table("users").update({"password_hash": new_hash}).eq("id", current_user["id"]).execute()
+        
+        return {"message": "Password changed successfully.", "success": True}
+    except Exception as e:
+        logger.error(f"Failed to change password: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to change password: {str(e)}")

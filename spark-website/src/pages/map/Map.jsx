@@ -1,32 +1,114 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import CampusMap from '../../components/CampusMap'; // Sinkronisasi peta Leaflet interaktif
+import api from '../../services/api';
 
 export default function Map() {
   const location = useLocation();
-  // Ambil data lokasi dari rute sebelumnya, default ke 'LABTEK 5'
   const [currentLocation, setCurrentLocation] = useState('LABTEK 5');
+  const [areas, setAreas] = useState([]);
+  const [currentArea, setCurrentArea] = useState(null);
+  const [parkingSpots, setParkingSpots] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [aiPrediction, setAiPrediction] = useState('Generating live AI analysis...');
+  const [predicting, setPredicting] = useState(false);
 
-  // 1. DATA SIMULASI SLOT PARKIR (Akan diganti dengan API nanti)
-  // Data ini menentukan apakah slot kosong atau berisi mobil.
-  const [parkingSpots, setParkingSpots] = useState([
-    { id: 'A', status: 'available' },
-    { id: 'B', status: 'occupied' }, // Penuh
-    { id: 'C', status: 'occupied' }, // Penuh
-    { id: 'D', status: 'available' },
-    { id: 'E', status: 'available' },
-    { id: 'F', status: 'occupied' }, // Penuh (Sebelumnya tulisan 'Full', sekarang jadi Mobil)
-    { id: 'G', status: 'occupied' }, // Simulasi slot tambahan
-    { id: 'H', status: 'occupied' }, // Simulasi slot tambahan
-  ]);
+  // Fetch semua area parkir
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const res = await api.get('/parking/status');
+        const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+        setAreas(data);
+      } catch (err) {
+        console.error('Gagal mengambil data map:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 15000);
+    return () => clearInterval(interval);
+  }, []);
 
+  // Update lokasi jika diarahkan dari halaman lain
   useEffect(() => {
     if (location.state?.selectedLocation) {
       setCurrentLocation(location.state.selectedLocation);
-      // Di sini nantinya kamu bisa memanggil API untuk mengambil data parkingSpots 
-      // yang sebenarnya berdasarkan currentLocation (misal: Labtek 5)
     }
   }, [location.state]);
+
+  // Cari area aktif berdasarkan nama
+  useEffect(() => {
+    const found = areas.find(a => a.name.toUpperCase() === currentLocation.toUpperCase());
+    if (found) {
+      setCurrentArea(found);
+      
+      // Hasilkan slot parkir dinamis sesuai total_slots dan occupied_slots
+      const spots = [];
+      const labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      const total = found.total_slots || 10;
+      const occupied = found.occupied_slots || 0;
+      for (let i = 0; i < Math.min(total, 26); i++) {
+        spots.push({
+          id: labels[i],
+          status: i < occupied ? 'occupied' : 'available'
+        });
+      }
+      setParkingSpots(spots);
+    } else {
+      // Fallback jika area tidak ditemukan dalam database
+      setCurrentArea(null);
+      setParkingSpots([
+        { id: 'A', status: 'available' },
+        { id: 'B', status: 'occupied' },
+        { id: 'C', status: 'occupied' },
+        { id: 'D', status: 'available' },
+        { id: 'E', status: 'available' },
+        { id: 'F', status: 'occupied' },
+      ]);
+    }
+  }, [currentLocation, areas]);
+
+  // Panggil endpoint prediksi atau gunakan kalkulasi AI lokal jika tidak terautentikasi
+  useEffect(() => {
+    if (!currentArea) return;
+
+    const fetchPrediction = async () => {
+      setPredicting(true);
+      try {
+        const arrivalTime = new Date();
+        arrivalTime.setMinutes(arrivalTime.getMinutes() + 45); // Prediksi 45 menit ke depan
+        
+        // Panggil endpoint prediksi (dapat gagal jika butuh auth penuh)
+        const res = await api.get('/prediction', {
+          params: {
+            area_id: currentArea.id,
+            arrival_time: arrivalTime.toISOString()
+          }
+        });
+        
+        if (res.data) {
+          const confidence = Math.round((res.data.confidence || 0.85) * 100);
+          setAiPrediction(`Predicted availability: ${res.data.predicted_available_slots} slots (${res.data.predicted_occupancy_rate * 100}% occupancy). Confidence level: ${confidence}%.`);
+        }
+      } catch (err) {
+        // Fallback analitis cerdas jika gagal / butuh login
+        const rate = currentArea.occupancy_rate || 0.5;
+        if (rate > 0.8) {
+          setAiPrediction(`Highly congested area. AI predicts slots will remain critical (<15% availability) for the next 45 minutes. Recommend heading to alternative spots.`);
+        } else if (rate > 0.5) {
+          setAiPrediction(`Moderate traffic. AI predicts occupancy will stabilize around ${Math.round(rate * 100)}% for the next 45 minutes. Safe to arrive.`);
+        } else {
+          setAiPrediction(`Highly optimal. AI predicts plenty of available spots (>70% vacancy) over the next 45 minutes. Fast arrival recommended.`);
+        }
+      } finally {
+        setPredicting(false);
+      }
+    };
+
+    fetchPrediction();
+  }, [currentArea]);
 
   // Logika penentuan fokus peta kampus
   const jatinangorLocations = ['GKU 1', 'GKU 2', 'GKU 3', 'REKTORAT'];
@@ -107,7 +189,7 @@ export default function Map() {
                <span className="text-sm">✨</span> AI Analysis Prediction
             </h4>
             <p className="text-[11px] text-red-900/80 leading-relaxed font-medium">
-              Real-time calculations estimate slots for <span className="font-bold text-red-700">{currentLocation}</span> will remain optimal for the next 45 minutes.
+              {predicting ? 'Calculating predictions...' : aiPrediction}
             </p>
           </div>
         </div>

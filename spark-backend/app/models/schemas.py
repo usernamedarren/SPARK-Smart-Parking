@@ -67,6 +67,11 @@ class NotificationUpdate(BaseModel):
     notification_preference: bool
 
 
+class ChangePasswordRequest(BaseModel):
+    """Request body for changing user password."""
+    new_password: str = Field(..., min_length=6, examples=["newsecurepassword123"])
+
+
 # ============================================================
 # Parking Area Schemas
 # ============================================================

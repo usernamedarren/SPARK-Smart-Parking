@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, EyeOff, Eye, UserPlus, User, ChevronDown } from 'lucide-react';
+import api from '../../services/api';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -14,6 +15,7 @@ export default function Register() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   // Fungsi pengecekan Password yang kuat
   const validatePassword = (pwd) => {
@@ -23,8 +25,9 @@ export default function Register() {
     return ""; // Kosong berarti lolos validasi
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
     
     const pwdError = validatePassword(password);
     if (pwdError) {
@@ -42,9 +45,23 @@ export default function Register() {
       return;
     }
 
+    setLoading(true);
     setError('');
-    console.log('Register sukses:', { name, email, role });
-    navigate('/login');
+    try {
+      await api.post('/auth/register', {
+        name,
+        email,
+        password,
+        role
+      });
+      console.log('Register sukses:', { name, email, role });
+      navigate('/login', { state: { successMsg: 'Registration successful! Please login to your account.' } });
+    } catch (err) {
+      console.error('Register gagal:', err);
+      setError(err.response?.data?.detail || 'Registration failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -100,8 +117,7 @@ export default function Register() {
           <select required value={role} onChange={(e) => {setRole(e.target.value); setError('');}} className={`w-full pl-11 pr-10 py-3 rounded-xl border border-red-300 bg-transparent focus:outline-none focus:ring-2 focus:ring-red-500 appearance-none cursor-pointer ${role === "" ? 'text-red-400' : 'text-red-900'}`}>
             <option value="" disabled>Choose role..</option>
             <option value="mahasiswa">Mahasiswa</option>
-            <option value="dosen">Dosen</option>
-            <option value="staf">Staf</option>
+            <option value="tenaga_didik">Tenaga Didik</option>
           </select>
           <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-red-600">
             <ChevronDown size={18} />

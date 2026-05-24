@@ -7,6 +7,8 @@ import {
   Image,
   TextInput,
   ImageBackground,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 
 import {
@@ -16,11 +18,38 @@ import {
 } from "@expo/vector-icons";
 
 import { useNavigation } from "@react-navigation/native";
+import { useAuth } from "../context/AuthContext";
 
 export default function SignInScreen() {
-  const [passwordVisible, setPasswordVisible] =
-    useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
   const navigation = useNavigation<any>();
+  const { signIn } = useAuth();
+
+  const handleSignIn = async () => {
+    if (!email.trim() || !password.trim()) {
+      setError("Please enter email and password.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      await signIn(email.trim(), password);
+      // Navigation is handled automatically by AuthProvider state change
+    } catch (e: any) {
+      const msg =
+        e?.response?.data?.detail || e?.message || "Login failed. Please try again.";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <ImageBackground
@@ -60,6 +89,14 @@ export default function SignInScreen() {
             real-time smart guidance
           </Text>
 
+          {/* ERROR */}
+          {error ? (
+            <View style={styles.errorBox}>
+              <Ionicons name="alert-circle" size={16} color="#D92E3F" />
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+
           {/* EMAIL */}
           <View style={styles.inputContainer}>
             <MaterialIcons
@@ -72,6 +109,11 @@ export default function SignInScreen() {
               placeholder="Email"
               placeholderTextColor="#E57A7A"
               style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              editable={!loading}
             />
           </View>
 
@@ -88,6 +130,9 @@ export default function SignInScreen() {
               placeholderTextColor="#E57A7A"
               secureTextEntry={!passwordVisible}
               style={styles.input}
+              value={password}
+              onChangeText={setPassword}
+              editable={!loading}
             />
 
             <TouchableOpacity
@@ -111,12 +156,17 @@ export default function SignInScreen() {
 
           {/* SIGN IN BUTTON */}
           <TouchableOpacity
-            style={styles.signInButton}
-            onPress={() => navigation.replace("MainTabs")}
+            style={[styles.signInButton, loading && { opacity: 0.7 }]}
+            onPress={handleSignIn}
+            disabled={loading}
           >
-            <Text style={styles.signInText}>
-              Sign In
-            </Text>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.signInText}>
+                Sign In
+              </Text>
+            )}
           </TouchableOpacity>
 
           {/* SIGN UP */}
@@ -124,9 +174,10 @@ export default function SignInScreen() {
               onPress={() =>
               navigation.navigate("Register")
             }
+            disabled={loading}
           >
             <Text style={styles.signUpText}>
-              Don’t have an account?{" "}
+              Don't have an account?{" "}
               <Text style={styles.signUpBold}>
                 Sign Up
               </Text>
@@ -217,6 +268,25 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 32,
     lineHeight: 22,
+  },
+
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF0F0",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 16,
+    width: "100%",
+  },
+
+  errorText: {
+    fontFamily: "PoppinsMedium",
+    fontSize: 12,
+    color: "#D92E3F",
+    marginLeft: 8,
+    flex: 1,
   },
 
   inputContainer: {
