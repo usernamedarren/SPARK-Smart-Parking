@@ -7,6 +7,8 @@ import {
   Image,
   TextInput,
   ImageBackground,
+  ActivityIndicator,
+  ScrollView,
 } from "react-native";
 
 import {
@@ -16,17 +18,55 @@ import {
 } from "@expo/vector-icons";
 
 import { useNavigation } from "@react-navigation/native";
+import { useAuth } from "../context/AuthContext";
+
+const ROLES = [
+  { label: "Mahasiswa", value: "mahasiswa" },
+  { label: "Tenaga Didik", value: "tenaga_didik" },
+];
 
 export default function RegisterScreen() {
   const navigation = useNavigation<any>();
+  const { signUp } = useAuth();
 
-  const [passwordVisible, setPasswordVisible] =
-    useState(false);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [role, setRole] = useState("");
+  const [showRoles, setShowRoles] = useState(false);
 
-  const [
-    confirmPasswordVisible,
-    setConfirmPasswordVisible,
-  ] = useState(false);
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const selectedRoleLabel = ROLES.find((r) => r.value === role)?.label || "";
+
+  const handleSignUp = async () => {
+    // Validation
+    if (!name.trim()) { setError("Please enter your name."); return; }
+    if (!email.trim()) { setError("Please enter your email."); return; }
+    if (!password.trim()) { setError("Please enter a password."); return; }
+    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (password !== confirmPassword) { setError("Passwords do not match."); return; }
+    if (!role) { setError("Please choose a role."); return; }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      await signUp(name.trim(), email.trim(), password, role);
+      // Navigation handled by AuthProvider
+    } catch (e: any) {
+      const msg =
+        e?.response?.data?.detail || e?.message || "Registration failed. Please try again.";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <ImageBackground
@@ -34,8 +74,11 @@ export default function RegisterScreen() {
       style={styles.container}
       resizeMode="cover"
     >
-      <View style={styles.overlay}>
-        {/* LOGO - sama kayak SignIn */}
+      <ScrollView
+        contentContainerStyle={styles.overlay}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* LOGO */}
         <Image
           source={require("../../assets/images/spark-logo.png")}
           style={styles.logo}
@@ -47,9 +90,7 @@ export default function RegisterScreen() {
           {/* BACK BUTTON */}
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() =>
-              navigation.goBack()
-            }
+            onPress={() => navigation.goBack()}
           >
             <Ionicons
               name="arrow-back"
@@ -78,6 +119,14 @@ export default function RegisterScreen() {
             real-time smart guidance
           </Text>
 
+          {/* ERROR */}
+          {error ? (
+            <View style={styles.errorBox}>
+              <Ionicons name="alert-circle" size={16} color="#D92E3F" />
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+
           {/* NAME */}
           <View style={styles.inputContainer}>
             <MaterialIcons
@@ -90,6 +139,9 @@ export default function RegisterScreen() {
               placeholder="Name"
               placeholderTextColor="#E57A7A"
               style={styles.input}
+              value={name}
+              onChangeText={setName}
+              editable={!loading}
             />
           </View>
 
@@ -105,6 +157,11 @@ export default function RegisterScreen() {
               placeholder="Email"
               placeholderTextColor="#E57A7A"
               style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              editable={!loading}
             />
           </View>
 
@@ -119,25 +176,18 @@ export default function RegisterScreen() {
             <TextInput
               placeholder="Password"
               placeholderTextColor="#E57A7A"
-              secureTextEntry={
-                !passwordVisible
-              }
+              secureTextEntry={!passwordVisible}
               style={styles.input}
+              value={password}
+              onChangeText={setPassword}
+              editable={!loading}
             />
 
             <TouchableOpacity
-              onPress={() =>
-                setPasswordVisible(
-                  !passwordVisible
-                )
-              }
+              onPress={() => setPasswordVisible(!passwordVisible)}
             >
               <Ionicons
-                name={
-                  passwordVisible
-                    ? "eye-outline"
-                    : "eye-off-outline"
-                }
+                name={passwordVisible ? "eye-outline" : "eye-off-outline"}
                 size={22}
                 color="#D14A3D"
               />
@@ -155,25 +205,18 @@ export default function RegisterScreen() {
             <TextInput
               placeholder="Confirm Password"
               placeholderTextColor="#E57A7A"
-              secureTextEntry={
-                !confirmPasswordVisible
-              }
+              secureTextEntry={!confirmPasswordVisible}
               style={styles.input}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              editable={!loading}
             />
 
             <TouchableOpacity
-              onPress={() =>
-                setConfirmPasswordVisible(
-                  !confirmPasswordVisible
-                )
-              }
+              onPress={() => setConfirmPasswordVisible(!confirmPasswordVisible)}
             >
               <Ionicons
-                name={
-                  confirmPasswordVisible
-                    ? "eye-outline"
-                    : "eye-off-outline"
-                }
+                name={confirmPasswordVisible ? "eye-outline" : "eye-off-outline"}
                 size={22}
                 color="#D14A3D"
               />
@@ -183,6 +226,8 @@ export default function RegisterScreen() {
           {/* ROLE */}
           <TouchableOpacity
             style={styles.inputContainer}
+            onPress={() => setShowRoles(!showRoles)}
+            disabled={loading}
           >
             <MaterialIcons
               name="person"
@@ -191,9 +236,12 @@ export default function RegisterScreen() {
             />
 
             <Text
-              style={styles.roleText}
+              style={[
+                styles.roleText,
+                role ? { color: "#222" } : {},
+              ]}
             >
-              Choose role..
+              {selectedRoleLabel || "Choose role.."}
             </Text>
 
             <Ionicons
@@ -203,23 +251,50 @@ export default function RegisterScreen() {
             />
           </TouchableOpacity>
 
+          {/* ROLE DROPDOWN */}
+          {showRoles && (
+            <View style={styles.roleDropdown}>
+              {ROLES.map((r) => (
+                <TouchableOpacity
+                  key={r.value}
+                  style={[
+                    styles.roleOption,
+                    role === r.value && styles.roleOptionActive,
+                  ]}
+                  onPress={() => {
+                    setRole(r.value);
+                    setShowRoles(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.roleOptionText,
+                      role === r.value && { color: "#D92E3F" },
+                    ]}
+                  >
+                    {r.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
           {/* BUTTON */}
           <TouchableOpacity
-            style={styles.signUpButton}
-            onPress={() =>
-              navigation.replace(
-                "MainTabs"
-              )
-            }
+            style={[styles.signUpButton, loading && { opacity: 0.7 }]}
+            onPress={handleSignUp}
+            disabled={loading}
           >
-            <Text
-              style={styles.signUpBtnText}
-            >
-              Sign Up
-            </Text>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.signUpBtnText}>
+                Sign Up
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
     </ImageBackground>
   );
 }
@@ -230,13 +305,14 @@ const styles = StyleSheet.create({
   },
 
   overlay: {
-    flex: 1,
+    flexGrow: 1,
     backgroundColor:
       "rgba(248,243,233,0.55)",
 
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 28,
+    paddingVertical: 40,
   },
 
   logo: {
@@ -321,6 +397,25 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF0F0",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 16,
+    width: "100%",
+  },
+
+  errorText: {
+    fontFamily: "PoppinsMedium",
+    fontSize: 12,
+    color: "#D92E3F",
+    marginLeft: 8,
+    flex: 1,
+  },
+
   inputContainer: {
     width: "100%",
     height: 54,
@@ -353,6 +448,33 @@ const styles = StyleSheet.create({
     fontFamily: "PoppinsMedium",
     fontSize: 15,
     color: "#E57A7A",
+  },
+
+  roleDropdown: {
+    width: "100%",
+    backgroundColor: "#FFF",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#F0D7D7",
+    marginBottom: 16,
+    overflow: "hidden",
+  },
+
+  roleOption: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F5EDED",
+  },
+
+  roleOptionActive: {
+    backgroundColor: "#FFF5F5",
+  },
+
+  roleOptionText: {
+    fontFamily: "PoppinsMedium",
+    fontSize: 14,
+    color: "#444",
   },
 
   signUpButton: {

@@ -1,4 +1,4 @@
-import React, {useState} from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   TextInput,
   Image,
   TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 
 import {
@@ -17,32 +19,110 @@ import {
 
 import MapView, { Marker } from "react-native-maps";
 import { useNavigation } from "@react-navigation/native";
+import { useAuth } from "../context/AuthContext";
+import {
+  getParkingAreas,
+  getRecommendations,
+  ParkingAreaWithStatus,
+  RecommendationItem,
+} from "../services/api";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function getGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return "Good Morning!";
+  if (h < 17) return "Good Afternoon!";
+  return "Good Evening!";
+}
+
+function statusColor(label: string): string {
+  switch (label) {
+    case "available": return "#406A43";
+    case "limited": return "#F2C94C";
+    case "full": return "#D92E3F";
+    default: return "#406A43";
+  }
+}
+
+function statusText(label: string): string {
+  switch (label) {
+    case "available": return "Available";
+    case "limited": return "Limited";
+    case "full": return "Full";
+    default: return "Available";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 export default function HomeScreen() {
-const navigation = useNavigation();
-const [searchText, setSearchText] =
-  useState("");
+  const navigation = useNavigation<any>();
+  const { user } = useAuth();
 
-const parkingLocations = [
-  "Labtek 5",
-  "Labtek 8",
-  "FSRD",
-];
+  const [searchText, setSearchText] = useState("");
+  const [areas, setAreas] = useState<ParkingAreaWithStatus[]>([]);
+  const [recommendations, setRecommendations] = useState<RecommendationItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-const filteredLocations =
-  parkingLocations.filter((item) =>
-    item
-      .toLowerCase()
-      .includes(
-        searchText.toLowerCase()
-      )
+  // Fetch data
+  const fetchData = useCallback(async () => {
+    try {
+      const [areasData, recsData] = await Promise.all([
+        getParkingAreas(),
+        getRecommendations("GKU Barat", 3).catch(() => ({ destination: "", recommendations: [] })),
+      ]);
+      setAreas(areasData);
+      setRecommendations(recsData.recommendations);
+    } catch (e) {
+      console.error("HomeScreen fetch error:", e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchData();
+  };
+
+  // Calculate campus-wide availability
+  const totalSlots = areas.reduce((s, a) => s + a.total_slots, 0);
+  const totalAvailable = areas.reduce((s, a) => s + a.available_slots, 0);
+  const campusPercent = totalSlots > 0 ? Math.round((totalAvailable / totalSlots) * 100) : 0;
+
+  // Search filter
+  const filteredLocations = areas.filter((a) =>
+    a.name.toLowerCase().includes(searchText.toLowerCase())
   );
+
+  // Map markers — only Ganesha campus for the small home map
+  const ganeshaAreas = areas.filter((a) => a.latitude > -6.93);
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <ActivityIndicator size="large" color="#D92E3F" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 100 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#D92E3F"]} />
+        }
       >
         <View style={styles.content}>
         {/* HEADER */}
@@ -76,7 +156,7 @@ const filteredLocations =
         <View style={styles.heroSection}>
           <View style={styles.textContainer}>
             <Text style={styles.greeting}>
-              Good Morning!
+              {getGreeting()}
             </Text>
 
             <Text style={styles.subtitle}>
@@ -105,26 +185,31 @@ const filteredLocations =
         </View>
         {searchText.length > 0 && (
           <View style={styles.searchResultBox}>
-            {filteredLocations.map(
-              (item, index) => (
+            {filteredLocations.length === 0 ? (
+              <View style={styles.searchItem}>
+                <Text style={styles.searchItemText}>No results found</Text>
+              </View>
+            ) : (
+              filteredLocations.map((area) => (
                 <TouchableOpacity
-                  key={index}
+                  key={area.id}
                   style={styles.searchItem}
                   onPress={() => {
                     setSearchText("");
-
-                    navigation.navigate(
-                      "DetailParking" as never
-                    );
+                    navigation.navigate("DetailParking", {
+                      selectedLocation: area.name,
+                      areaId: area.id,
+                    });
                   }}
                 >
-                  <Text
-                    style={styles.searchItemText}
-                  >
-                    {item}
+                  <Text style={styles.searchItemText}>
+                    {area.name}
+                  </Text>
+                  <Text style={[styles.searchItemStatus, { color: statusColor(area.status_label) }]}>
+                    {area.available_slots} spots
                   </Text>
                 </TouchableOpacity>
-              )
+              ))
             )}
           </View>
         )}
@@ -158,7 +243,7 @@ const filteredLocations =
             {/* RIGHT */}
             <View style={styles.rightSection}>
               <Text style={styles.percent}>
-                62%
+                {campusPercent}%
               </Text>
 
               <Text style={styles.campusText}>
@@ -200,9 +285,11 @@ const filteredLocations =
             Nearby Parking
           </Text>
 
-          <Text style={styles.viewAll}>
-            View All
-          </Text>
+          <TouchableOpacity onPress={() => navigation.navigate("Map" as never)}>
+            <Text style={styles.viewAll}>
+              View All
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.mapContainer}>
@@ -219,30 +306,17 @@ const filteredLocations =
             rotateEnabled={false}
             pitchEnabled={false}
           >
-            <Marker
-              coordinate={{
-                latitude: -6.8915,
-                longitude: 107.6107,
-              }}
-              title="Labtek 5"
-              description="Parking Area"
-            />
-
-            <Marker
-              coordinate={{
-                latitude: -6.8922,
-                longitude: 107.6115,
-              }}
-              title="Labtek 8"
-            />
-
-            <Marker
-              coordinate={{
-                latitude: -6.8908,
-                longitude: 107.6098,
-              }}
-              title="FSRD"
-            />
+            {ganeshaAreas.map((area) => (
+              <Marker
+                key={area.id}
+                coordinate={{
+                  latitude: area.latitude,
+                  longitude: area.longitude,
+                }}
+                title={area.name}
+                description={`${area.available_slots} spots available`}
+              />
+            ))}
           </MapView>
         </View>
 
@@ -254,106 +328,46 @@ const filteredLocations =
         </View>
 
         <View style={styles.recommendationRow}>
+          {recommendations.slice(0, 3).map((rec) => (
+            <View key={rec.area_id} style={styles.recommendCard}>
+              <View style={[
+                styles.parkingBadge,
+                { backgroundColor: statusColor(rec.status_label) }
+              ]}>
+                <Text style={styles.badgeText}>P</Text>
+              </View>
 
-          {/* CARD 1 */}
-          <View style={styles.recommendCard}>
-            <View style={[
-              styles.parkingBadge,
-              { backgroundColor: "#406A43" }
-            ]}>
-              <Text style={styles.badgeText}>P</Text>
-            </View>
-
-            <Text style={styles.locationName}>
-              Labtek 5
-            </Text>
-
-            <Text style={styles.availableStatus}>
-              Available
-            </Text>
-
-            <Text style={styles.spotsText}>
-              24 spots
-            </Text>
-
-            <Text style={styles.walkText}>
-              🚶 3 min walk
-            </Text>
-
-            <TouchableOpacity style={styles.detailBtn}
-              onPress={() => navigation.navigate("DetailParking" as never)}>
-              <Text style={styles.detailText}>
-                View Details
+              <Text style={styles.locationName}>
+                {rec.area_name}
               </Text>
-            </TouchableOpacity>
-          </View>
 
-          {/* CARD 2 */}
-          <View style={styles.recommendCard}>
-            <View style={[
-              styles.parkingBadge,
-              { backgroundColor: "#D92E3F" }
-            ]}>
-              <Text style={styles.badgeText}>P</Text>
-            </View>
-
-            <Text style={styles.locationName}>
-              FSRD
-            </Text>
-
-            <Text style={styles.fullStatus}>
-              Full
-            </Text>
-
-            <Text style={styles.spotsText}>
-              0 spots
-            </Text>
-
-            <Text style={styles.walkText}>
-              🚶 3 min walk
-            </Text>
-
-            <TouchableOpacity style={styles.detailBtn}
-              onPress={() => navigation.navigate("DetailParking" as never)}>
-              <Text style={styles.detailText}>
-                View Details
+              <Text style={[
+                rec.status_label === "available" ? styles.availableStatus :
+                rec.status_label === "limited" ? styles.limitedStatus :
+                styles.fullStatus
+              ]}>
+                {statusText(rec.status_label)}
               </Text>
-            </TouchableOpacity>
-          </View>
 
-          {/* CARD 3 */}
-          <View style={styles.recommendCard}>
-            <View style={[
-              styles.parkingBadge,
-              { backgroundColor: "#F2C94C" }
-            ]}>
-              <Text style={styles.badgeText}>P</Text>
-            </View>
-
-            <Text style={styles.locationName}>
-              Labtek 8
-            </Text>
-
-            <Text style={styles.limitedStatus}>
-              Limited
-            </Text>
-
-            <Text style={styles.spotsText}>
-              4 spots
-            </Text>
-
-            <Text style={styles.walkText}>
-              🚶 3 min walk
-            </Text>
-
-            <TouchableOpacity style={styles.detailBtn}
-              onPress={() => navigation.navigate("DetailParking" as never)}>
-              <Text style={styles.detailText}>
-                View Details
+              <Text style={styles.spotsText}>
+                {rec.available_slots} spots
               </Text>
-            </TouchableOpacity>
-          </View>
 
+              <Text style={styles.walkText}>
+                🚶 {rec.estimated_walk_minutes} min walk
+              </Text>
+
+              <TouchableOpacity style={styles.detailBtn}
+                onPress={() => navigation.navigate("DetailParking", {
+                  selectedLocation: rec.area_name,
+                  areaId: rec.area_id,
+                })}>
+                <Text style={styles.detailText}>
+                  View Details
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ))}
         </View>
 
         <TouchableOpacity 
@@ -605,58 +619,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 
-bottomNav: {
-  position: "absolute",
-  bottom: 0,
-  left: 0,
-  right: 0,
-
-  height: 82,
-  backgroundColor: "#FFFFFF",
-
-  flexDirection: "row",
-  justifyContent: "space-around",
-  alignItems: "center",
-
-  borderTopWidth: 1.5,
-  borderTopColor: "#F2D6D6",
-
-  paddingBottom: 10,
-
-  zIndex: 999,
-  elevation: 20,
-},
-
-  navItem: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  navText: {
-    fontFamily: "PoppinsRegular",
-    fontSize: 10,
-    color: "#4B4B4B",
-    marginTop: 4,
-  },
-
-  activeTab: {
-    alignItems: "center",
-    justifyContent: "center",
-
-    backgroundColor: "#FBE6E3",
-
-    width: 58,
-    height: 38,
-    borderRadius: 20,
-  },
-
-  activeTabText: {
-    fontFamily: "PoppinsMedium",
-    fontSize: 10,
-    color: "#D92E3F",
-    marginTop: 2,
-  },
-
   smartHeader: {
     marginTop: 14,
   },
@@ -786,7 +748,7 @@ bottomNav: {
   searchResultBox: {
     position: "absolute",
 
-    top: 245, // atur posisi tepat bawah search bar
+    top: 245,
     left: 24,
     right: 24,
 
@@ -799,20 +761,25 @@ bottomNav: {
     elevation: 8,
     zIndex: 9999,
 
-    overflow: "hidden",
+    paddingVertical: 8,
   },
 
-searchItem: {
-  paddingVertical: 12,
-  paddingHorizontal: 16,
+  searchItem: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
 
-  borderBottomWidth: 1,
-  borderBottomColor: "#F5F5F5",
-},
+  searchItemText: {
+    fontFamily: "PoppinsMedium",
+    fontSize: 14,
+    color: "#333",
+  },
 
-searchItemText: {
-  fontFamily: "PoppinsMedium",
-  fontSize: 13,
-  color: "#333",
-},
+  searchItemStatus: {
+    fontFamily: "PoppinsMedium",
+    fontSize: 12,
+  },
 });

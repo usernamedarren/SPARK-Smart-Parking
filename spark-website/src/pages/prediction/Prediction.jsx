@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CampusMap from '../../components/CampusMap'; // Menggunakan komponen peta interaktif asli
+import api from '../../services/api';
 
 export default function Prediction() {
   const navigate = useNavigate();
   const [campus, setCampus] = useState('Ganesha');
   const [location, setLocation] = useState('');
+  const [recommendations, setRecommendations] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   // Pembagian wilayah sesuai poin 2
   const campusData = {
@@ -13,11 +16,101 @@ export default function Prediction() {
     Jatinangor: ['GKU 1', 'GKU 2', 'GKU 3', 'REKTORAT']
   };
 
-  // Poin 3: Data rekomendasi otomatis muncul berdasarkan area yang dipilih
-  const recommendations = location ? [
-    { name: `${location} Main Parking`, spots: 24, walk: '1 min walk' },
-    { name: campus === 'Ganesha' ? 'GKU Timur Parking' : 'GKU 2 Parking', spots: 12, walk: '3 min walk' },
-  ] : [];
+  // Panggil endpoint rekomendasi ketika lokasi berubah
+  useEffect(() => {
+    if (!location) {
+      setRecommendations([]);
+      return;
+    }
+
+    const fetchRecommendations = async () => {
+      setLoading(true);
+      try {
+        // Coba panggil endpoint rekomendasi di backend
+        const res = await api.get('/recommendation', {
+          params: { destination: location, top_n: 3 }
+        });
+        
+        if (res.data && res.data.recommendations) {
+          setRecommendations(res.data.recommendations.map(item => ({
+            name: item.area_name,
+            spots: item.available_slots,
+            total: item.total_slots,
+            walk: `${Math.round(item.estimated_walk_minutes || 3)} min walk`,
+            status: item.status_label
+          })));
+        }
+      } catch (err) {
+        // Fallback cerdas jika gagal / butuh auth
+        try {
+          const statusRes = await api.get('/parking/status');
+          const areas = Array.isArray(statusRes.data) ? statusRes.data : (statusRes.data?.data || []);
+          
+          // Filter sesuai kampus terpilih
+          const campusAreas = areas.filter(area => {
+            const isJatinangor = area.latitude <= -6.92;
+            return campus === 'Jatinangor' ? isJatinangor : !isJatinangor;
+          });
+          
+          // Sort berdasarkan occupancy rate terendah (ketersediaan terbaik)
+          const sorted = [...campusAreas].sort((a, b) => a.occupancy_rate - b.occupancy_rate);
+          
+          const items = [];
+          // Rekomendasi utama: lokasi yang dituju jika ada di database
+          const mainArea = campusAreas.find(a => a.name.toUpperCase() === location.toUpperCase());
+          if (mainArea) {
+            items.push({
+              name: mainArea.name,
+              spots: mainArea.available_slots,
+              total: mainArea.total_slots,
+              walk: '1 min walk',
+              status: mainArea.status_label
+            });
+          } else {
+            items.push({
+              name: `${location} Main Parking`,
+              spots: 24,
+              total: 30,
+              walk: '1 min walk',
+              status: 'available'
+            });
+          }
+
+          // Rekomendasi alternatif dari list yang disortir
+          const alternative = sorted.find(a => a.name.toUpperCase() !== location.toUpperCase());
+          if (alternative) {
+            items.push({
+              name: alternative.name,
+              spots: alternative.available_slots,
+              total: alternative.total_slots,
+              walk: '3 min walk',
+              status: alternative.status_label
+            });
+          } else {
+            items.push({
+              name: campus === 'Ganesha' ? 'GKU Timur Parking' : 'GKU 2 Parking',
+              spots: 12,
+              total: 20,
+              walk: '3 min walk',
+              status: 'available'
+            });
+          }
+          
+          setRecommendations(items);
+        } catch (fallbackErr) {
+          // Fallback statis jika backend benar-benar offline
+          setRecommendations([
+            { name: `${location} Main Parking`, spots: 24, total: 30, walk: '1 min walk', status: 'available' },
+            { name: campus === 'Ganesha' ? 'GKU Timur Parking' : 'GKU 2 Parking', spots: 12, total: 20, walk: '3 min walk', status: 'available' },
+          ]);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRecommendations();
+  }, [location, campus]);
 
   return (
     <div className="flex flex-col h-full gap-4">
@@ -88,12 +181,16 @@ export default function Prediction() {
                       <span className="text-[10px] font-bold text-gray-500">🚶 {item.walk}</span>
                     </div>
                     <div className="flex justify-between items-center mb-3">
-                      <span className="text-[10px] text-[#3A5A40] bg-[#E8F0E9] px-2 py-0.5 rounded font-bold uppercase tracking-wider">Available</span>
-                      <span className="text-sm font-extrabold text-gray-800">24 <span className="font-semibold text-gray-400 text-xs">spots</span></span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider ${
+                        item.spots === 0 ? 'text-red-600 bg-red-50' : 'text-[#3A5A40] bg-[#E8F0E9]'
+                      }`}>
+                        {item.spots === 0 ? 'Full' : 'Available'}
+                      </span>
+                      <span className="text-sm font-extrabold text-gray-800">{item.spots} <span className="font-semibold text-gray-400 text-xs">/{item.total || 30} spots</span></span>
                     </div>
                     {/* Saat diklik, langsung diarahkan ke halaman slot parkiran */}
                     <button 
-                      onClick={() => navigate('/map', { state: { selectedLocation: location } })}
+                      onClick={() => navigate('/map', { state: { selectedLocation: item.name } })}
                       className="w-full py-2.5 text-[#3A5A40] border border-[#3A5A40]/30 rounded-xl text-xs font-bold hover:bg-[#F4F9F5] transition flex justify-center items-center gap-2"
                     >
                       <span className="text-lg leading-none">📍</span> Navigate

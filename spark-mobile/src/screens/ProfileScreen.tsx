@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,10 @@ import {
   TouchableOpacity,
   Image,
   ScrollView,
+  Modal,
+  TextInput,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 
 import {
@@ -16,9 +20,79 @@ import {
 } from "@expo/vector-icons";
 
 import { useNavigation } from "@react-navigation/native";
+import { useAuth } from "../context/AuthContext";
+import { updateProfile, updatePassword } from "../services/api";
 
 export default function ProfileScreen() {
-const navigation = useNavigation();
+  const navigation = useNavigation<any>();
+  const { user, signOut, refreshUser } = useAuth();
+
+  // Modal states
+  const [editNameModalVisible, setEditNameModalVisible] = useState(false);
+  const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
+  
+  const [newName, setNewName] = useState(user?.name || "");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleLogout = async () => {
+    await signOut();
+  };
+
+  const handleSaveName = async () => {
+    if (!newName.trim()) {
+      Alert.alert("Error", "Name cannot be empty.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await updateProfile({ name: newName.trim() });
+      await refreshUser(); // Refresh global auth state
+      setEditNameModalVisible(false);
+      Alert.alert("Success", "Name updated successfully!");
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || e?.message || "Failed to update name.";
+      Alert.alert("Error", msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSavePassword = async () => {
+    if (newPassword.length < 6) {
+      Alert.alert("Error", "Password must be at least 6 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      Alert.alert("Error", "Passwords do not match.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await updatePassword(newPassword);
+      setChangePasswordModalVisible(false);
+      setNewPassword("");
+      setConfirmPassword("");
+      Alert.alert("Success", "Password changed successfully!");
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || e?.message || "Failed to change password.";
+      Alert.alert("Error", msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Map role value to display label
+  const roleDisplay = (role?: string) => {
+    switch (role) {
+      case "mahasiswa": return "Mahasiswa";
+      case "tenaga_didik": return "Tenaga Didik";
+      default: return role || "Mahasiswa";
+    }
+  };
 
   return (
     <ScrollView
@@ -28,6 +102,106 @@ const navigation = useNavigation();
         paddingBottom: 40,
       }}
     >
+      {/* EDIT NAME MODAL */}
+      <Modal
+        visible={editNameModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditNameModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Edit Name</Text>
+            
+            <TextInput
+              style={styles.modalInput}
+              value={newName}
+              onChangeText={setNewName}
+              placeholder="Enter your name"
+              placeholderTextColor="#A0A0A0"
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.saveButton]}
+                onPress={handleSaveName}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>Save</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setEditNameModalVisible(false)}
+              >
+                <Text style={[styles.buttonText, { color: "#7A6761" }]}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* CHANGE PASSWORD MODAL */}
+      <Modal
+        visible={changePasswordModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setChangePasswordModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Change Password</Text>
+            
+            <TextInput
+              style={styles.modalInput}
+              value={newPassword}
+              onChangeText={setNewPassword}
+              placeholder="New password (min. 6 chars)"
+              placeholderTextColor="#A0A0A0"
+              secureTextEntry
+            />
+
+            <TextInput
+              style={styles.modalInput}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              placeholder="Confirm new password"
+              placeholderTextColor="#A0A0A0"
+              secureTextEntry
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.saveButton]}
+                onPress={handleSavePassword}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.buttonText}>Save</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => {
+                  setChangePasswordModalVisible(false);
+                  setNewPassword("");
+                  setConfirmPassword("");
+                }}
+              >
+                <Text style={[styles.buttonText, { color: "#7A6761" }]}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity
@@ -55,14 +229,25 @@ const navigation = useNavigation();
       />
 
       {/* PROFILE IMAGE */}
-      <Image
-        source={require("../../assets/images/profile-avatar.png")}
-        style={styles.profileImage}
-      />
+      <View style={{ alignSelf: "center", position: "relative" }}>
+        <Image
+          source={require("../../assets/images/profile-avatar.png")}
+          style={styles.profileImage}
+        />
+        <TouchableOpacity 
+          style={styles.editImageBadge}
+          onPress={() => {
+            setNewName(user?.name || "");
+            setEditNameModalVisible(true);
+          }}
+        >
+          <MaterialIcons name="edit" size={16} color="#fff" />
+        </TouchableOpacity>
+      </View>
 
       {/* NAME */}
       <Text style={styles.name}>
-        Andi Makmur
+        {user?.name || "User"}
       </Text>
 
       {/* ROLE BADGE */}
@@ -74,14 +259,14 @@ const navigation = useNavigation();
         />
 
         <Text style={styles.roleText}>
-          Student
+          {roleDisplay(user?.role)}
         </Text>
       </View>
 
       {/* INFO CARD */}
       <View style={styles.infoCard}>
         {/* EMAIL */}
-        <TouchableOpacity
+        <View
           style={styles.infoRow}
         >
           <View style={styles.leftRow}>
@@ -98,20 +283,15 @@ const navigation = useNavigation();
 
           <View style={styles.rightRow}>
             <Text style={styles.infoValue}>
-              andimakmur22@gmail.com
+              {user?.email || "—"}
             </Text>
-
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color="#D92E3F"
-            />
           </View>
-        </TouchableOpacity>
+        </View>
 
         {/* PASSWORD */}
         <TouchableOpacity
           style={styles.infoRow}
+          onPress={() => setChangePasswordModalVisible(true)}
         >
           <View style={styles.leftRow}>
             <Feather
@@ -126,8 +306,8 @@ const navigation = useNavigation();
           </View>
 
           <View style={styles.rightRow}>
-            <Text style={styles.infoValue}>
-              ********
+            <Text style={[styles.infoValue, { color: "#D92E3F", fontFamily: "PoppinsMedium" }]}>
+              Change Password
             </Text>
 
             <Ionicons
@@ -139,7 +319,7 @@ const navigation = useNavigation();
         </TouchableOpacity>
 
         {/* ROLE */}
-        <TouchableOpacity
+        <View
           style={styles.infoRow}
         >
           <View style={styles.leftRow}>
@@ -155,23 +335,17 @@ const navigation = useNavigation();
           </View>
 
           <View style={styles.rightRow}>
-            <Text style={styles.infoValue}>
-              Student
+            <Text style={[styles.infoValue, { textTransform: "capitalize" }]}>
+              {roleDisplay(user?.role)}
             </Text>
-
-            <Ionicons
-              name="chevron-forward"
-              size={18}
-              color="#D92E3F"
-            />
           </View>
-        </TouchableOpacity>
+        </View>
       </View>
 
       {/* LOGOUT */}
       <TouchableOpacity
         style={styles.logoutButton}
-        onPress={() => {navigation.navigate("SignIn" as never);}}
+        onPress={handleLogout}
       >
         <MaterialCommunityIcons
           name="logout"
@@ -244,6 +418,20 @@ const styles = StyleSheet.create({
     marginTop: 22,
   },
 
+  editImageBadge: {
+    position: "absolute",
+    bottom: 0,
+    right: 4,
+    backgroundColor: "#D92E3F",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: "#FFF",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   name: {
     fontFamily: "PoppinsBold",
     fontSize: 24,
@@ -276,6 +464,7 @@ const styles = StyleSheet.create({
     fontFamily: "PoppinsMedium",
     fontSize: 13,
     color: "#111",
+    textTransform: "capitalize",
   },
 
   infoCard: {
@@ -347,5 +536,67 @@ const styles = StyleSheet.create({
     fontSize: 16,
 
     marginLeft: 8,
+  },
+
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  modalContent: {
+    width: "100%",
+    backgroundColor: "#fff",
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: "#F0D7D7",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontFamily: "PoppinsBold",
+    fontSize: 18,
+    color: "#D92E3F",
+    marginBottom: 16,
+  },
+  modalInput: {
+    height: 52,
+    borderWidth: 1,
+    borderColor: "#E2D0D0",
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    fontFamily: "PoppinsRegular",
+    fontSize: 14,
+    color: "#333",
+    marginBottom: 14,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 6,
+  },
+  modalButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  saveButton: {
+    backgroundColor: "#D92E3F",
+  },
+  cancelButton: {
+    backgroundColor: "#F2E6E6",
+  },
+  buttonText: {
+    fontFamily: "PoppinsSemiBold",
+    fontSize: 14,
+    color: "#fff",
   },
 });

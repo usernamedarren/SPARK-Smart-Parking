@@ -1,14 +1,15 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import { useNavigate } from 'react-router-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import api from '../services/api';
 
 // 1. Data Koordinat Asli / Tiruan untuk penyebaran titik di peta
 const parkingData = {
   Ganesha: [
-    { id: 'LABTEK 5', name: 'Parkiran SR', spots: 20, lat: -6.8905, lng: 107.6100 },
-    { id: 'LABTEK 8', name: 'Labtek 8', spots: 15, lat: -6.8910, lng: 107.6115 },
+    { id: 'LABTEK 5', name: 'LABTEK 5', spots: 20, lat: -6.8905, lng: 107.6100 },
+    { id: 'LABTEK 8', name: 'LABTEK 8', spots: 15, lat: -6.8910, lng: 107.6115 },
     { id: 'FSRD', name: 'FSRD', spots: 18, lat: -6.8920, lng: 107.6105 },
     { id: 'GKUB', name: 'GKUB', spots: 25, lat: -6.8915, lng: 107.6120 },
     { id: 'GKUT', name: 'GKUT', spots: 30, lat: -6.8918, lng: 107.6110 },
@@ -20,7 +21,7 @@ const parkingData = {
     { id: 'GKU 1', name: 'GKU 1', spots: 40, lat: -6.9270, lng: 107.7735 },
     { id: 'GKU 2', name: 'GKU 2', spots: 35, lat: -6.9280, lng: 107.7745 },
     { id: 'GKU 3', name: 'GKU 3', spots: 45, lat: -6.9275, lng: 107.7750 },
-    { id: 'REKTORAT', name: 'Rektorat', spots: 20, lat: -6.9265, lng: 107.7740 },
+    { id: 'REKTORAT', name: 'REKTORAT', spots: 20, lat: -6.9265, lng: 107.7740 },
   ]
 };
 
@@ -57,6 +58,23 @@ function MapUpdater({ center }) {
 
 export default function CampusMap({ campus = 'Ganesha' }) {
   const navigate = useNavigate();
+  const [areas, setAreas] = useState([]);
+
+  // Ambil data status ter-update
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const res = await api.get('/parking/status');
+        const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+        setAreas(data);
+      } catch (err) {
+        console.error('Gagal mengambil status map:', err);
+      }
+    };
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 15000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Titik tengah kamera
   const centerCoordinates = {
@@ -65,7 +83,16 @@ export default function CampusMap({ campus = 'Ganesha' }) {
   };
 
   const center = centerCoordinates[campus] || centerCoordinates.Ganesha;
-  const currentMarkers = parkingData[campus] || [];
+  const rawMarkers = parkingData[campus] || [];
+
+  // Map markers to use real database spots
+  const currentMarkers = rawMarkers.map(marker => {
+    const matched = areas.find(a => a.name.toUpperCase() === marker.id.toUpperCase());
+    return {
+      ...marker,
+      spots: matched ? matched.available_slots : marker.spots
+    };
+  });
 
   return (
     <MapContainer 

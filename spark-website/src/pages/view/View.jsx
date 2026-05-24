@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Camera, RefreshCw } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
+import api from '../../services/api';
 
 export default function View() {
   const routeLocation = useLocation();
   const [selectedFeed, setSelectedFeed] = useState('LABTEK 5');
+  const [areas, setAreas] = useState([]);
+  const [currentArea, setCurrentArea] = useState(null);
+  const [imageError, setImageError] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Menangkap perubahan data dari Search bar
   useEffect(() => {
@@ -13,11 +18,38 @@ export default function View() {
     }
   }, [routeLocation.state]);
 
+  // Fetch data area status untuk live camera
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const res = await api.get('/parking/status');
+        const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+        setAreas(data);
+      } catch (err) {
+        console.error('Gagal mengambil status feed kamera:', err);
+      }
+    };
+    fetchStatus();
+  }, [refreshTrigger]);
+
+  // Match area terpiih
+  useEffect(() => {
+    const found = areas.find(a => a.name.toUpperCase() === selectedFeed.toUpperCase());
+    setCurrentArea(found || null);
+    setImageError(false); // Reset error status saat ganti feed
+  }, [selectedFeed, areas]);
+
   // Daftar lengkap wilayah yang sama dengan Search bar
   const campusFeeds = {
     Ganesha: ['LABTEK 5', 'LABTEK 8', 'FSRD', 'GKUB', 'GKUT', 'CADL', 'ALBAR', 'ALTIM'],
     Jatinangor: ['GKU 1', 'GKU 2', 'GKU 3', 'REKTORAT']
   };
+
+  const handleRefresh = () => {
+    setRefreshTrigger(prev => prev + 1);
+  };
+
+  const hasSnapshot = currentArea && currentArea.image_url;
 
   return (
     <div className="flex flex-col h-full gap-4">
@@ -26,23 +58,35 @@ export default function View() {
         {/* Left Side: Live Video Monitor Stream Card */}
         <div className="flex-[3] bg-gray-900 border border-gray-800 rounded-3xl relative overflow-hidden flex flex-col shadow-md">
           <div className="flex-1 w-full bg-black relative flex items-center justify-center">
-            <div className="absolute top-4 left-4 bg-red-600 text-white px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest animate-pulse flex items-center gap-1.5">
+            <div className="absolute top-4 left-4 bg-red-600 text-white px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-widest animate-pulse flex items-center gap-1.5 z-10">
               <span className="w-2 h-2 rounded-full bg-white"></span> Live Cam
             </div>
-            <div className="absolute top-4 right-4 bg-black/60 text-white/80 px-3 py-1 rounded-md text-[10px] font-bold">
+            <div className="absolute top-4 right-4 bg-black/60 text-white/80 px-3 py-1 rounded-md text-[10px] font-bold z-10">
               CAMERA FEED ID: CAM_{selectedFeed.replace(/ /g, '_')}
             </div>
 
-            <div className="text-center text-white/40 space-y-2">
-              <Camera size={48} className="mx-auto text-gray-700 animate-pulse" />
-              <p className="text-xs font-bold font-mono tracking-wider">CONNECTING TO STREAM FEED SITE...</p>
-              <p className="text-[11px] font-bold text-gray-500 font-mono uppercase">{selectedFeed} PARKING COMPLEX</p>
-            </div>
+            {hasSnapshot && !imageError ? (
+              <img
+                src={`http://localhost:8000${currentArea.image_url}?t=${refreshTrigger}`}
+                onError={() => setImageError(true)}
+                alt={`${selectedFeed} Live Feed`}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="text-center text-white/40 space-y-2">
+                <Camera size={48} className="mx-auto text-gray-700 animate-pulse" />
+                <p className="text-xs font-bold font-mono tracking-wider">CONNECTING TO STREAM FEED SITE...</p>
+                <p className="text-[11px] font-bold text-gray-500 font-mono uppercase">{selectedFeed} PARKING COMPLEX</p>
+              </div>
+            )}
           </div>
           
           <div className="bg-white p-4 border-t border-red-100 flex justify-between items-center px-6">
             <span className="text-xs font-extrabold text-gray-800">Monitoring Zone: <span className="text-red-600">{selectedFeed}</span></span>
-            <button className="text-xs font-bold text-red-600 flex items-center gap-1.5 hover:text-red-800 transition">
+            <button 
+              onClick={handleRefresh}
+              className="text-xs font-bold text-red-600 flex items-center gap-1.5 hover:text-red-800 transition"
+            >
               <RefreshCw size={14} /> Refresh Feed
             </button>
           </div>

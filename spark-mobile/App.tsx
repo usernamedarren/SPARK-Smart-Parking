@@ -26,6 +26,8 @@ import {
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
 
+import { AuthProvider, useAuth } from "./src/context/AuthContext";
+
 import HomeScreen from "./src/screens/HomeScreen";
 import MapScreen from "./src/screens/MapScreen";
 import PredictionScreen from "./src/screens/PredictionScreen";
@@ -203,6 +205,61 @@ function BottomTabs() {
   );
 }
 
+function AppNavigator() {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          backgroundColor: "#F9F5EF",
+        }}
+      >
+        <ActivityIndicator size="large" color="#D92E3F" />
+      </View>
+    );
+  }
+
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+      }}
+    >
+      {!isAuthenticated ? (
+        <>
+          <Stack.Screen
+            name="SignIn"
+            component={SignInScreen}
+          />
+          <Stack.Screen
+            name="Register"
+            component={RegisterScreen}
+          />
+        </>
+      ) : (
+        <>
+          <Stack.Screen
+            name="MainTabs"
+            component={BottomTabs}
+          />
+          <Stack.Screen
+            name="Profile"
+            component={ProfileScreen}
+          />
+          <Stack.Screen
+            name="DetailParking"
+            component={DetailParkingScreen}
+          />
+        </>
+      )}
+    </Stack.Navigator>
+  );
+}
+
 export default function App() {
   const [loaded] = useFonts({
     PoppinsRegular: require("./assets/fonts/Poppins-Regular.ttf"),
@@ -226,33 +283,10 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator
-        screenOptions={{
-          headerShown: false,
-        }}
-      >
-        <Stack.Screen
-          name="SignIn"
-          component={SignInScreen}
-        />
-        <Stack.Screen
-          name="MainTabs"
-          component={BottomTabs}
-        />
-        <Stack.Screen
-          name="Profile"
-          component={ProfileScreen}
-        />
-        <Stack.Screen
-          name="Register"
-          component={RegisterScreen}
-        />
-        <Stack.Screen
-          name="DetailParking"
-          component={DetailParkingScreen}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <AuthProvider>
+      <NavigationContainer>
+        <AppNavigator />
+      </NavigationContainer>
+    </AuthProvider>
   );
 }

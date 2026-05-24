@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
   StyleSheet,
   Image,
   TouchableOpacity,
+  ActivityIndicator,
 } from "react-native";
 
 import MapView, {
@@ -20,136 +21,79 @@ import {
   useNavigation,
 } from "@react-navigation/native";
 
+import {
+  getParkingAreas,
+  ParkingAreaWithStatus,
+} from "../services/api";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function statusColor(label: string): string {
+  switch (label) {
+    case "available": return "#406A43";
+    case "limited": return "#F2C94C";
+    case "full": return "#D92E3F";
+    default: return "#406A43";
+  }
+}
+
+function spotsLabel(area: ParkingAreaWithStatus): string {
+  if (area.status_label === "full") return "Full";
+  if (area.status_label === "limited") return `${area.available_slots} spots`;
+  return `${area.available_slots} spots`;
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export default function MapScreen() {
-  const navigation =
-    useNavigation<any>();
+  const navigation = useNavigation<any>();
 
-  const [selected, setSelected] =
-    useState("All");
-  
-  const [selectedCampus,
-    setSelectedCampus] =
-    useState("Ganesha");
+  const [areas, setAreas] = useState<ParkingAreaWithStatus[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [showDropdown, setShowDropdown] =
-    useState(false);
+  const [selectedCampus, setSelectedCampus] = useState("Ganesha");
+  const [selected, setSelected] = useState("All");
+  const [showDropdown, setShowDropdown] = useState(false);
 
-  const campusLocations = {
-  Ganesha: [
-    {
-      name: "Labtek 5",
-      spots: "20 spots",
-      color: "#406A43",
-      latitude: -6.8915,
-      longitude: 107.6107,
-    },
-    {
-      name: "Labtek 8",
-      spots: "5 spots",
-      color: "#F2C94C",
-      latitude: -6.8919,
-      longitude: 107.6116,
-    },
-    {
-      name: "FSRD",
-      spots: "Full",
-      color: "#D92E3F",
-      latitude: -6.8932,
-      longitude: 107.612,
-    },
-    {
-      name: "GKUB",
-      spots: "12 spots",
-      color: "#406A43",
-      latitude: -6.8923,
-      longitude: 107.6101,
-    },
-    {
-      name: "GKUT",
-      spots: "Limited",
-      color: "#F2C94C",
-      latitude: -6.8928,
-      longitude: 107.6098,
-    },
-    {
-      name: "CADL",
-      spots: "15 spots",
-      color: "#406A43",
-      latitude: -6.8909,
-      longitude: 107.611,
-    },
-    {
-      name: "Aula Barat",
-      spots: "Full",
-      color: "#D92E3F",
-      latitude: -6.891,
-      longitude: 107.6089,
-    },
-    {
-      name: "Aula Timur",
-      spots: "8 spots",
-      color: "#F2C94C",
-      latitude: -6.892,
-      longitude: 107.6127,
-    },
-  ],
+  // Fetch
+  const fetchData = useCallback(async () => {
+    try {
+      const data = await getParkingAreas();
+      setAreas(data);
+    } catch (e) {
+      console.error("MapScreen fetch error:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  Jatinangor: [
-    {
-      name: "GKU 1",
-      spots: "18 spots",
-      color: "#406A43",
-      latitude: -6.9314,
-      longitude: 107.7704,
-    },
-    {
-      name: "GKU 2",
-      spots: "Limited",
-      color: "#F2C94C",
-      latitude: -6.9308,
-      longitude: 107.7712,
-    },
-    {
-      name: "GKU 3",
-      spots: "Full",
-      color: "#D92E3F",
-      latitude: -6.9319,
-      longitude: 107.772,
-    },
-    {
-      name: "Rektorat",
-      spots: "9 spots",
-      color: "#406A43",
-      latitude: -6.9299,
-      longitude: 107.7708,
-    },
-  ],
-};
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-const currentLocations =
-  campusLocations[
-    selectedCampus as keyof typeof campusLocations
-  ];
+  // Separate by campus (latitude-based heuristic)
+  const ganeshaAreas = areas.filter((a) => a.latitude > -6.92);
+  const jatinangorAreas = areas.filter((a) => a.latitude <= -6.92);
 
-  const filteredLocations =
-    selected === "All"
-      ? currentLocations
-      : currentLocations.filter(
-          (item) =>
-            item.name === selected
-        );
+  const currentAreas = selectedCampus === "Ganesha" ? ganeshaAreas : jatinangorAreas;
 
-  const dropdownLocations =
-    selectedCampus ===
-    "Ganesha"
-      ? [
-          "GKUB",
-          "GKUT",
-          "CADL",
-          "Aula Barat",
-          "Aula Timur",
-        ]
-      : [];
+  const filteredAreas = selected === "All"
+    ? currentAreas
+    : currentAreas.filter((a) => a.name === selected);
+
+  // Build filter chips (first 3 + "More" for extras)
+  const mainChips = currentAreas.slice(0, 3).map((a) => a.name);
+  const dropdownChips = currentAreas.slice(3).map((a) => a.name);
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <ActivityIndicator size="large" color="#D92E3F" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -162,9 +106,7 @@ const currentLocations =
 
         <TouchableOpacity
           onPress={() =>
-            navigation.navigate(
-              "Profile"
-            )
+            navigation.navigate("Profile")
           }
         >
           <Ionicons
@@ -177,32 +119,22 @@ const currentLocations =
 
       {/* CAMPUS SELECTOR */}
       <View style={styles.campusContainer}>
-        {[
-          "Ganesha",
-          "Jatinangor",
-        ].map((campus) => (
+        {["Ganesha", "Jatinangor"].map((campus) => (
           <TouchableOpacity
             key={campus}
             style={[
               styles.campusChip,
-              selectedCampus ===
-                campus &&
-                styles.activeCampus,
+              selectedCampus === campus && styles.activeCampus,
             ]}
             onPress={() => {
-              setSelectedCampus(
-                campus
-              );
-
+              setSelectedCampus(campus);
               setSelected("All");
             }}
           >
             <Text
               style={[
                 styles.campusText,
-                selectedCampus ===
-                  campus &&
-                  styles.activeCampusText,
+                selectedCampus === campus && styles.activeCampusText,
               ]}
             >
               {campus}
@@ -211,129 +143,69 @@ const currentLocations =
         ))}
       </View>
 
-{/* FILTER */}
-<View style={styles.filterContainer}>
-  {(selectedCampus ===
-  "Ganesha"
-    ? [
-        "All",
-        "Labtek 5",
-        "Labtek 8",
-        "FSRD",
-      ]
-    : [
-        "All",
-        "GKU 1",
-        "GKU 2",
-        "GKU 3",
-        "Rektorat",
-      ]
-  ).map((item) => (
-    <TouchableOpacity
-      key={item}
-      style={[
-        styles.filterChip,
-        selected === item &&
-          styles.activeChip,
-      ]}
-      onPress={() =>
-        setSelected(item)
-      }
-    >
-      <Text
-        style={[
-          styles.filterText,
-          selected === item &&
-            styles.activeChipText,
-        ]}
-      >
-        {item}
-      </Text>
-    </TouchableOpacity>
-  ))}
+      {/* FILTER */}
+      <View style={styles.filterContainer}>
+        <TouchableOpacity
+          style={[styles.filterChip, selected === "All" && styles.activeChip]}
+          onPress={() => setSelected("All")}
+        >
+          <Text style={[styles.filterText, selected === "All" && styles.activeChipText]}>
+            All
+          </Text>
+        </TouchableOpacity>
 
-  {/* DROPDOWN ONLY GANESHA */}
-  {selectedCampus ===
-    "Ganesha" && (
-    <TouchableOpacity
-      style={
-        styles.dropdownButton
-      }
-      onPress={() =>
-        setShowDropdown(
-          !showDropdown
-        )
-      }
-    >
-      <Text
-        style={
-          styles.filterText
-        }
-      >
-        More
-      </Text>
+        {mainChips.map((item) => (
+          <TouchableOpacity
+            key={item}
+            style={[styles.filterChip, selected === item && styles.activeChip]}
+            onPress={() => setSelected(item)}
+          >
+            <Text style={[styles.filterText, selected === item && styles.activeChipText]}>
+              {item}
+            </Text>
+          </TouchableOpacity>
+        ))}
 
-      <Ionicons
-        name={
-          showDropdown
-            ? "chevron-up"
-            : "chevron-down"
-        }
-        size={16}
-        color="#D92E3F"
-      />
-    </TouchableOpacity>
-  )}
-</View>
+        {/* DROPDOWN FOR MORE */}
+        {dropdownChips.length > 0 && (
+          <TouchableOpacity
+            style={styles.dropdownButton}
+            onPress={() => setShowDropdown(!showDropdown)}
+          >
+            <Text style={styles.filterText}>More</Text>
+            <Ionicons
+              name={showDropdown ? "chevron-up" : "chevron-down"}
+              size={16}
+              color="#D92E3F"
+            />
+          </TouchableOpacity>
+        )}
+      </View>
 
       {/* DROPDOWN MENU */}
       {showDropdown && (
-        <View
-          style={
-            styles.dropdownMenu
-          }
-        >
-          {dropdownLocations.map(
-            (location) => (
-              <TouchableOpacity
-                key={location}
-                style={
-                  styles.dropdownItem
-                }
-                onPress={() => {
-                  setSelected(
-                    location
-                  );
-
-                  setShowDropdown(
-                    false
-                  );
-                }}
-              >
-                <Text
-                  style={
-                    styles.dropdownText
-                  }
-                >
-                  {location}
-                </Text>
-              </TouchableOpacity>
-            )
-          )}
+        <View style={styles.dropdownMenu}>
+          {dropdownChips.map((location) => (
+            <TouchableOpacity
+              key={location}
+              style={styles.dropdownItem}
+              onPress={() => {
+                setSelected(location);
+                setShowDropdown(false);
+              }}
+            >
+              <Text style={styles.dropdownText}>{location}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
       )}
 
       {/* MAP */}
-      <View
-        style={
-          styles.mapContainer
-        }
-      >
+      <View style={styles.mapContainer}>
         <MapView
           style={styles.map}
           region={
-            selectedCampus ===
-            "Ganesha"
+            selectedCampus === "Ganesha"
               ? {
                   latitude: -6.8915,
                   longitude: 107.6107,
@@ -341,86 +213,51 @@ const currentLocations =
                   longitudeDelta: 0.006,
                 }
               : {
-                  latitude: -6.9313,
-                  longitude: 107.771,
+                  latitude: -6.9275,
+                  longitude: 107.7740,
                   latitudeDelta: 0.008,
                   longitudeDelta: 0.008,
                 }
-          }>
-          {filteredLocations.map(
-            (location) => (
-              <Marker
-                key={
-                  location.name
-                }
-                coordinate={{
-                  latitude:
-                    location.latitude,
-                  longitude:
-                    location.longitude,
-                }}
-                onPress={() =>
-                  navigation.navigate(
-                    "DetailParking",
-                    {
-                      selectedLocation:
-                        location.name,
-                    }
-                  )
-                }
-              >
-                <TouchableOpacity>
-                  <View
+          }
+        >
+          {filteredAreas.map((area) => (
+            <Marker
+              key={area.id}
+              coordinate={{
+                latitude: area.latitude,
+                longitude: area.longitude,
+              }}
+              onPress={() =>
+                navigation.navigate("DetailParking", {
+                  selectedLocation: area.name,
+                  areaId: area.id,
+                })
+              }
+            >
+              <TouchableOpacity>
+                <View
+                  style={[
+                    styles.marker,
+                    { backgroundColor: statusColor(area.status_label) },
+                  ]}
+                >
+                  <Text style={styles.markerText}>P</Text>
+                </View>
+
+                <View style={styles.popup}>
+                  <Text style={styles.popupTitle}>{area.name}</Text>
+                  <Text
                     style={[
-                      styles.marker,
-                      {
-                        backgroundColor:
-                          location.color,
-                      },
+                      styles.popupSubtitle,
+                      { color: statusColor(area.status_label) },
                     ]}
                   >
-                    <Text
-                      style={
-                        styles.markerText
-                      }
-                    >
-                      P
-                    </Text>
-                  </View>
-
-                  <View
-                    style={
-                      styles.popup
-                    }
-                  >
-                    <Text
-                      style={
-                        styles.popupTitle
-                      }
-                    >
-                      {
-                        location.name
-                      }
-                    </Text>
-
-                    <Text
-                      style={[
-                        styles.popupSubtitle,
-                        {
-                          color:
-                            location.color,
-                        },
-                      ]}
-                    >
-                      {
-                        location.spots
-                      }
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              </Marker>
-            )
-          )}
+                    {spotsLabel(area)}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </Marker>
+          ))}
         </MapView>
       </View>
     </View>
@@ -492,29 +329,6 @@ const styles = StyleSheet.create({
     fontFamily: "PoppinsSemiBold",
   },
 
-  /* LOCATE BUTTON */
-  locateBtn: {
-    marginTop: 12,
-
-    backgroundColor: "#406A43",
-
-    alignSelf: "flex-start",
-
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  locateText: {
-    color: "#fff",
-    fontFamily: "PoppinsMedium",
-    fontSize: 11,
-    marginLeft: 4,
-  },
-
   /* MAP */
   mapContainer: {
     marginTop: 14,
@@ -583,120 +397,57 @@ const styles = StyleSheet.create({
     color: "#777",
   },
 
-  /* LEGEND */
-  legendRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 12,
-    paddingHorizontal: 2,
-  },
-
-  legend: {
-    fontSize: 10,
-    color: "#777",
-    fontFamily: "PoppinsRegular",
-  },
-
-  /* NAVBAR */
-  bottomNav: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-
-    height: 82,
-    backgroundColor: "#fff",
-
-    flexDirection: "row",
-    justifyContent: "space-around",
-    alignItems: "center",
-
-    borderTopWidth: 1.5,
-    borderTopColor: "#F2D6D6",
-
-    paddingBottom: 10,
-  },
-
-  navItem: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  navText: {
-    fontFamily: "PoppinsRegular",
-    fontSize: 10,
-    color: "#4B4B4B",
-    marginTop: 4,
-  },
-
-  activeTab: {
-    alignItems: "center",
-    justifyContent: "center",
-
-    backgroundColor: "#FBE6E3",
-
-    width: 58,
-    height: 36,
-    borderRadius: 18,
-  },
-
-  activeTabText: {
-    fontFamily: "PoppinsMedium",
-    fontSize: 10,
-    color: "#D92E3F",
-    marginTop: 2,
-  },
   dropdownButton: {
-  flexDirection: "row",
-  alignItems: "center",
-  gap: 4,
-},
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
 
-dropdownMenu: {
-  backgroundColor: "#FFF",
-  borderRadius: 18,
-  borderWidth: 1,
-  borderColor: "#F0D7D7",
-  paddingVertical: 8,
-  marginTop: 8,
-},
+  dropdownMenu: {
+    backgroundColor: "#FFF",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#F0D7D7",
+    paddingVertical: 8,
+    marginTop: 8,
+  },
 
-dropdownItem: {
-  paddingVertical: 10,
-  paddingHorizontal: 16,
-},
+  dropdownItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
 
-dropdownText: {
-  fontFamily: "PoppinsMedium",
-  color: "#444",
-},
+  dropdownText: {
+    fontFamily: "PoppinsMedium",
+    color: "#444",
+  },
 
-campusContainer: {
-  flexDirection: "row",
-  marginTop: 8,
-  marginBottom: 12,
-  gap: 8,
-},
+  campusContainer: {
+    flexDirection: "row",
+    marginTop: 8,
+    marginBottom: 12,
+    gap: 8,
+  },
 
-campusChip: {
-  backgroundColor: "#EFEAE6",
-  paddingHorizontal: 18,
-  paddingVertical: 8,
-  borderRadius: 20,
-},
+  campusChip: {
+    backgroundColor: "#EFEAE6",
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
 
-activeCampus: {
-  backgroundColor: "#FBE6E3",
-},
+  activeCampus: {
+    backgroundColor: "#FBE6E3",
+  },
 
-campusText: {
-  fontFamily: "PoppinsMedium",
-  color: "#777",
-  fontSize: 12,
-},
+  campusText: {
+    fontFamily: "PoppinsMedium",
+    color: "#777",
+    fontSize: 12,
+  },
 
-activeCampusText: {
-  color: "#D92E3F",
-  fontFamily: "PoppinsSemiBold",
-},
+  activeCampusText: {
+    color: "#D92E3F",
+    fontFamily: "PoppinsSemiBold",
+  },
 });

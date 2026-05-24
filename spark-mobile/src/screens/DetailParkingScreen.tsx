@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   Image,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
 
 import {
@@ -15,254 +16,144 @@ import {
 } from "@expo/vector-icons";
 
 import { useNavigation, useRoute } from "@react-navigation/native";
+import {
+  getParkingAreas,
+  getParkingAreaStatus,
+  getPrediction,
+  ParkingAreaWithStatus,
+  PredictionResponse,
+} from "../services/api";
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 export default function DetailParkingScreen() {
-  
-  const navigation =
-    useNavigation<any>();
+  const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const initialLocation =
-  route.params
-    ?.selectedLocation ||
-  "Labtek 5";
 
-  const [selectedLocation,
-    setSelectedLocation] =
-    useState(initialLocation);
+  const initialLocation = route.params?.selectedLocation || "LABTEK 5";
+  const initialAreaId = route.params?.areaId || "";
 
-  const [showDropdown,
-    setShowDropdown] =
-    useState(false);
+  const [areas, setAreas] = useState<ParkingAreaWithStatus[]>([]);
+  const [currentArea, setCurrentArea] = useState<ParkingAreaWithStatus | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState(initialLocation);
+  const [loading, setLoading] = useState(true);
 
-  const ganeshaDropdown = [
-    "GKUB",
-    "GKUT",
-    "CADL",
-    "Aula Barat",
-    "Aula Timur",
-  ];
+  const [showDropdown, setShowDropdown] = useState(false);
 
-  const jatinangorLocations = [
-    "GKU 1",
-    "GKU 2",
-    "GKU 3",
-    "Rektorat",
-  ];
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  const [aiPrediction, setAiPrediction] = useState("Please select the parking slot first!");
+  const [predicting, setPredicting] = useState(false);
 
-  const [selectedSlot, setSelectedSlot] =
-  useState<string | null>(null);
+  // Fetch all areas
+  const fetchAreas = useCallback(async () => {
+    try {
+      const data = await getParkingAreas();
+      setAreas(data);
 
-  const [aiPrediction, setAiPrediction] =
-  useState(
-    "Please select the parking slot first!"
+      // Find current area
+      const found = data.find(
+        (a) => a.id === initialAreaId || a.name === initialLocation
+      );
+      if (found) {
+        setCurrentArea(found);
+        setSelectedLocation(found.name);
+      }
+    } catch (e) {
+      console.error("DetailParkingScreen fetch error:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, [initialAreaId, initialLocation]);
+
+  useEffect(() => { fetchAreas(); }, [fetchAreas]);
+
+  // When location changes, update current area
+  useEffect(() => {
+    const found = areas.find((a) => a.name === selectedLocation);
+    if (found) setCurrentArea(found);
+  }, [selectedLocation, areas]);
+
+  // Determine campus
+  const isJatinangor = currentArea ? currentArea.latitude <= -6.92 : false;
+  const campusAreas = areas.filter((a) =>
+    isJatinangor ? a.latitude <= -6.92 : a.latitude > -6.92
   );
 
-  // 10 SLOT RANDOM TIAP LOKASI
-  const parkingData: Record<
-    string,
-    {
-      id: string;
-      car: boolean;
-    }[]
-  > = {
-    "Labtek 5": [
-      { id: "A", car: false },
-      { id: "B", car: true },
-      { id: "C", car: true },
-      { id: "D", car: false },
-      { id: "E", car: false },
-      { id: "F", car: true },
-      { id: "G", car: false },
-      { id: "H", car: true },
-      { id: "I", car: false },
-      { id: "J", car: true },
-      { id: "K", car: false },
-      { id: "L", car: true },
-    ],
+  // Build filter chips (first 3 areas) + dropdown for rest
+  const mainChips = campusAreas.slice(0, 3).map((a) => a.name);
+  const dropdownChips = campusAreas.slice(3).map((a) => a.name);
 
-    "Labtek 8": [
-      { id: "A", car: true },
-      { id: "B", car: false },
-      { id: "C", car: false },
-      { id: "D", car: true },
-      { id: "E", car: true },
-      { id: "F", car: false },
-      { id: "G", car: true },
-      { id: "H", car: false },
-      { id: "I", car: true },
-      { id: "J", car: false },
-    ],
+  // Generate parking slots from current area data
+  const generateSlots = () => {
+    if (!currentArea) return [];
+    const slots: { id: string; car: boolean }[] = [];
+    const slotLabels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const total = currentArea.total_slots;
+    const occupied = currentArea.occupied_slots;
 
-    FSRD: [
-      { id: "A", car: true },
-      { id: "B", car: true },
-      { id: "C", car: false },
-      { id: "D", car: true },
-      { id: "E", car: false },
-      { id: "F", car: false },
-      { id: "G", car: true },
-      { id: "H", car: false },
-      { id: "I", car: true },
-      { id: "J", car: false },
-    ],
-
-    GKUB: [
-      { id: "A", car: false },
-      { id: "B", car: false },
-      { id: "C", car: true },
-      { id: "D", car: false },
-      { id: "E", car: true },
-      { id: "F", car: false },
-      { id: "G", car: false },
-      { id: "H", car: true },
-      { id: "I", car: false },
-      { id: "J", car: true },
-    ],
-
-    GKUT: [
-      { id: "A", car: true },
-      { id: "B", car: false },
-      { id: "C", car: true },
-      { id: "D", car: false },
-      { id: "E", car: true },
-      { id: "F", car: true },
-      { id: "G", car: false },
-      { id: "H", car: false },
-      { id: "I", car: true },
-      { id: "J", car: false },
-    ],
-
-    CADL: [
-      { id: "A", car: false },
-      { id: "B", car: true },
-      { id: "C", car: false },
-      { id: "D", car: false },
-      { id: "E", car: true },
-      { id: "F", car: false },
-      { id: "G", car: true },
-      { id: "H", car: true },
-      { id: "I", car: false },
-      { id: "J", car: false },
-    ],
-
-    "Aula Barat": [
-      { id: "A", car: true },
-      { id: "B", car: true },
-      { id: "C", car: false },
-      { id: "D", car: false },
-      { id: "E", car: true },
-      { id: "F", car: false },
-      { id: "G", car: true },
-      { id: "H", car: false },
-      { id: "I", car: true },
-      { id: "J", car: false },
-    ],
-
-    "Aula Timur": [
-      { id: "A", car: false },
-      { id: "B", car: false },
-      { id: "C", car: true },
-      { id: "D", car: true },
-      { id: "E", car: false },
-      { id: "F", car: true },
-      { id: "G", car: false },
-      { id: "H", car: true },
-      { id: "I", car: false },
-      { id: "J", car: true },
-    ],
-
-    "GKU 1": [
-    { id: "A", car: false },
-    { id: "B", car: true },
-    { id: "C", car: false },
-    { id: "D", car: true },
-    { id: "E", car: false },
-    { id: "F", car: true },
-    { id: "G", car: false },
-    { id: "H", car: true },
-    { id: "I", car: false },
-    { id: "J", car: false },
-  ],
-
-  "GKU 2": [
-    { id: "A", car: true },
-    { id: "B", car: false },
-    { id: "C", car: true },
-    { id: "D", car: false },
-    { id: "E", car: true },
-    { id: "F", car: false },
-    { id: "G", car: false },
-    { id: "H", car: true },
-    { id: "I", car: false },
-    { id: "J", car: true },
-  ],
-
-  "GKU 3": [
-    { id: "A", car: false },
-    { id: "B", car: false },
-    { id: "C", car: true },
-    { id: "D", car: true },
-    { id: "E", car: false },
-    { id: "F", car: true },
-    { id: "G", car: true },
-    { id: "H", car: false },
-    { id: "I", car: true },
-    { id: "J", car: false },
-  ],
-
-  Rektorat: [
-    { id: "A", car: true },
-    { id: "B", car: false },
-    { id: "C", car: false },
-    { id: "D", car: true },
-    { id: "E", car: true },
-    { id: "F", car: false },
-    { id: "G", car: false },
-    { id: "H", car: true },
-    { id: "I", car: false },
-    { id: "J", car: true },
-  ],
+    for (let i = 0; i < Math.min(total, 26); i++) {
+      slots.push({
+        id: slotLabels[i],
+        car: i < occupied,
+      });
+    }
+    return slots;
   };
 
-  const parkingSlots =
-    parkingData[
-      selectedLocation
-    ];
+  const parkingSlots = generateSlots();
 
-  const generatePrediction = (
-    slotId: string,
-    hasCar: boolean
-  ) => {
+  // Generate prediction for a slot
+  const generatePrediction = async (slotId: string, hasCar: boolean) => {
     if (hasCar) {
       setAiPrediction(
         `❌ Slot ${slotId} is currently occupied.\nPlease select another parking slot.`
       );
-
+      setSelectedSlot(null);
       return;
     }
 
-  const predictions = [
-    `✅ Slot ${slotId} has a HIGH chance of staying available for the next 20–35 minutes.\nRecommended for immediate parking.\nConfidence: 89%`,
+    setSelectedSlot(slotId);
 
-    `⚠️ Slot ${slotId} may become occupied within 10–15 minutes.\nRecommended if arriving soon.\nConfidence: 74%`,
+    if (!currentArea) return;
 
-    `✅ Slot ${slotId} is predicted to remain available during peak time.\nEstimated availability: 25+ minutes.\nConfidence: 91%`,
-  ];
+    setPredicting(true);
+    try {
+      const arrivalTime = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+      const pred = await getPrediction(currentArea.id, arrivalTime);
 
-  const randomPrediction =
-    predictions[
-      Math.floor(
-        Math.random() *
-          predictions.length
-      )
-    ];
+      const confidence = Math.round(pred.confidence * 100);
 
-  setAiPrediction(
-    randomPrediction
-  );
+      if (pred.predicted_status_label === "available") {
+        setAiPrediction(
+          `✅ Slot ${slotId} has a HIGH chance of staying available for the next 20–35 minutes.\nRecommended for immediate parking.\nConfidence: ${confidence}%`
+        );
+      } else if (pred.predicted_status_label === "limited") {
+        setAiPrediction(
+          `⚠️ Slot ${slotId} may become occupied within 10–15 minutes.\nRecommended if arriving soon.\nConfidence: ${confidence}%`
+        );
+      } else {
+        setAiPrediction(
+          `❌ Slot ${slotId} is predicted to be occupied soon.\nConsider choosing another area.\nConfidence: ${confidence}%`
+        );
+      }
+    } catch (e) {
+      setAiPrediction(
+        `✅ Slot ${slotId} is currently available.\nPrediction service unavailable — showing current status.`
+      );
+    } finally {
+      setPredicting(false);
+    }
+  };
 
-  setSelectedSlot(slotId);
-};
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <ActivityIndicator size="large" color="#D92E3F" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -275,11 +166,7 @@ export default function DetailParkingScreen() {
           />
 
           <TouchableOpacity
-            onPress={() =>
-              navigation.navigate(
-                "Profile"
-              )
-            }
+            onPress={() => navigation.navigate("Profile")}
           >
             <MaterialCommunityIcons
               name="account-circle"
@@ -292,12 +179,8 @@ export default function DetailParkingScreen() {
         {/* FILTER */}
         <View style={styles.filterRow}>
           <TouchableOpacity
-            style={
-              styles.backButton
-            }
-            onPress={() =>
-              navigation.goBack()
-            }
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
           >
             <Feather
               name="arrow-left"
@@ -306,141 +189,78 @@ export default function DetailParkingScreen() {
             />
           </TouchableOpacity>
 
-          <View
-            style={
-              styles.filterContainer
-            }
-          >
-            {(
-                selectedLocation.includes("GKU") ||
-                selectedLocation === "Rektorat"
-                  ? [
-                      "GKU 1",
-                      "GKU 2",
-                      "GKU 3",
-                      "Rektorat",
-                    ]
-                  : [
-                      "Labtek 5",
-                      "Labtek 8",
-                      "FSRD",
-                    ]
-              ).map((item) => (
+          <View style={styles.filterContainer}>
+            {mainChips.map((item) => (
               <TouchableOpacity
                 key={item}
                 style={[
                   styles.filterChip,
-                  selectedLocation ===
-                    item &&
-                    styles.activeChip,
+                  selectedLocation === item && styles.activeChip,
                 ]}
-                onPress={() =>
-                  setSelectedLocation(
-                    item
-                  )
-                }
+                onPress={() => setSelectedLocation(item)}
               >
                 <Text
                   style={[
                     styles.filterText,
-                    selectedLocation ===
-                      item &&
-                      styles.activeFilterText,
+                    selectedLocation === item && styles.activeFilterText,
                   ]}
                 >
                   {item}
                 </Text>
               </TouchableOpacity>
             ))}
-        {!(
-          selectedLocation.includes("GKU") ||
-          selectedLocation === "Rektorat"
-        ) && (
-          <TouchableOpacity
-            style={styles.dropdownButton}
-            onPress={() =>
-              setShowDropdown(
-                !showDropdown
-              )
-            }
-          >
-            <Text style={styles.filterText}>
-              More
-            </Text>
 
-            <Ionicons
-              name={
-                showDropdown
-                  ? "chevron-up"
-                  : "chevron-down"
-              }
-              size={16}
-              color="#D92E2F"
-            />
-          </TouchableOpacity>
-        )}
+            {dropdownChips.length > 0 && (
+              <TouchableOpacity
+                style={styles.dropdownButton}
+                onPress={() => setShowDropdown(!showDropdown)}
+              >
+                <Text style={styles.filterText}>More</Text>
+                <Ionicons
+                  name={showDropdown ? "chevron-up" : "chevron-down"}
+                  size={16}
+                  color="#D92E2F"
+                />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
         {/* DROPDOWN */}
         {showDropdown && (
-          <View
-            style={
-              styles.dropdownMenu
-            }
-          >
-            {(
-                selectedLocation.includes("GKU") ||
-                selectedLocation === "Rektorat"
-                  ? jatinangorLocations
-                  : ganeshaDropdown
-              ).map(
-              (
-                location
-              ) => (
-                <TouchableOpacity
-                  key={location}
-                  style={
-                    styles.dropdownItem
-                  }
-                  onPress={() => {
-                    setSelectedLocation(
-                      location
-                    );
-
-                    setShowDropdown(
-                      false
-                    );
-                  }}
-                >
-                  <Text
-                    style={
-                      styles.dropdownText
-                    }
-                  >
-                    {location}
-                  </Text>
-                </TouchableOpacity>
-              )
-            )}
+          <View style={styles.dropdownMenu}>
+            {dropdownChips.map((location) => (
+              <TouchableOpacity
+                key={location}
+                style={styles.dropdownItem}
+                onPress={() => {
+                  setSelectedLocation(location);
+                  setShowDropdown(false);
+                }}
+              >
+                <Text style={styles.dropdownText}>{location}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         )}
 
         {/* TITLE */}
-        <View
-          style={styles.titleRow}
-        >
+        <View style={styles.titleRow}>
           <MaterialCommunityIcons
             name="parking"
             size={28}
             color="#D92E2F"
           />
 
-          <Text
-            style={styles.title}
-          >
+          <Text style={styles.title}>
             {selectedLocation}
           </Text>
+
+          {currentArea && (
+            <Text style={styles.statusInfo}>
+              {currentArea.available_slots}/{currentArea.total_slots} available
+            </Text>
+          )}
         </View>
 
         {/* GRID */}
@@ -448,70 +268,37 @@ export default function DetailParkingScreen() {
           style={styles.gridScroll}
           showsVerticalScrollIndicator={false}
         >
-        <View style={styles.grid}>
-          {parkingSlots.map(
-            (slot) => (
-              <View
-                key={slot.id}
-                style={
-                  styles.slotWrapper
-                }
-              >
-      {slot.car ? (
-        <TouchableOpacity
-          onPress={() =>
-            generatePrediction(
-              slot.id,
-              true
-            )
-          }
-        >
-          <Image
-            source={require("../../assets/images/car-top.png")}
-            style={styles.carImage}
-          />
-        </TouchableOpacity>
-      ) : (
-        <TouchableOpacity
-          style={[
-            styles.slotCard,
-            selectedSlot ===
-              slot.id &&
-              styles.selectedSlot,
-          ]}
-          onPress={() =>
-            generatePrediction(
-              slot.id,
-              false
-            )
-          }
-        >
-                    <Text
-                      style={
-                        styles.slotLetter
-                      }
-                    >
-                      {slot.id}
-                    </Text>
-
-                    <Text
-                      style={
-                        styles.slotStatus
-                      }
-                    >
-                      Available
-                    </Text>
+          <View style={styles.grid}>
+            {parkingSlots.map((slot) => (
+              <View key={slot.id} style={styles.slotWrapper}>
+                {slot.car ? (
+                  <TouchableOpacity
+                    onPress={() => generatePrediction(slot.id, true)}
+                  >
+                    <Image
+                      source={require("../../assets/images/car-top.png")}
+                      style={styles.carImage}
+                    />
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[
+                      styles.slotCard,
+                      selectedSlot === slot.id && styles.selectedSlot,
+                    ]}
+                    onPress={() => generatePrediction(slot.id, false)}
+                  >
+                    <Text style={styles.slotLetter}>{slot.id}</Text>
+                    <Text style={styles.slotStatus}>Available</Text>
                   </TouchableOpacity>
                 )}
               </View>
-            )
-          )}
-        </View>
-      </ScrollView>  
-
+            ))}
+          </View>
+        </ScrollView>
       </View>
-      {/* AI CARD */}
 
+      {/* AI CARD */}
       <View style={styles.fixedAiContainer}>
         <View style={styles.aiCard}>
           <Text style={styles.aiTitle}>
@@ -519,13 +306,14 @@ export default function DetailParkingScreen() {
           </Text>
 
           <View style={styles.aiBox}>
-            <Text style={styles.aiText}>
-              {aiPrediction}
-            </Text>
+            {predicting ? (
+              <ActivityIndicator size="small" color="#D92E3F" />
+            ) : (
+              <Text style={styles.aiText}>{aiPrediction}</Text>
+            )}
+          </View>
         </View>
       </View>
-    </View>
-
     </View>
   );
 }
@@ -592,11 +380,6 @@ const styles = StyleSheet.create({
     color: "#D92E2F",
   },
 
-  filterIcon: {
-    marginLeft: "auto",
-    paddingLeft: 4,
-  },
-
   titleRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -610,6 +393,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "#D92E2F",
     marginLeft: 8,
+  },
+
+  statusInfo: {
+    fontFamily: "PoppinsRegular",
+    fontSize: 12,
+    color: "#888",
+    marginLeft: "auto",
   },
 
   grid: {
@@ -712,52 +502,53 @@ const styles = StyleSheet.create({
   },
 
   dropdownButton: {
-  flexDirection: "row",
-  alignItems: "center",
-  gap: 4,
-  marginLeft: 4,
-},
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginLeft: 4,
+  },
 
-dropdownMenu: {
-  backgroundColor: "#FFF",
-  borderRadius: 18,
-  marginHorizontal: 30,
-  marginTop: 8,
-  paddingVertical: 10,
-  borderWidth: 1,
-  borderColor: "#F1D0D0",
-},
+  dropdownMenu: {
+    backgroundColor: "#FFF",
+    borderRadius: 18,
+    marginHorizontal: 30,
+    marginTop: 8,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#F1D0D0",
+  },
 
-dropdownItem: {
-  paddingVertical: 10,
-  paddingHorizontal: 16,
-},
+  dropdownItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
 
-dropdownText: {
-  fontFamily: "PoppinsMedium",
-  fontSize: 13,
-  color: "#444",
-},
+  dropdownText: {
+    fontFamily: "PoppinsMedium",
+    fontSize: 13,
+    color: "#444",
+  },
 
-selectedSlot: {
-  borderWidth: 2.5,
-  borderColor: "#D92E2F",
-  backgroundColor: "#FFF5F5",
-},
+  selectedSlot: {
+    borderWidth: 2.5,
+    borderColor: "#D92E2F",
+    backgroundColor: "#FFF5F5",
+  },
 
-fixedAiContainer: {
-  position: "absolute",
-  bottom: 20,
-  left: 0,
-  right: 0,
-},
+  fixedAiContainer: {
+    position: "absolute",
+    bottom: 20,
+    left: 0,
+    right: 0,
+  },
 
-gridScroll: {
-  maxHeight: 450,
-  marginTop: 20,
-  paddingBottom: 180,
-},
-content: {
-  flex: 1,
-},
+  gridScroll: {
+    maxHeight: 450,
+    marginTop: 20,
+    paddingBottom: 180,
+  },
+
+  content: {
+    flex: 1,
+  },
 });

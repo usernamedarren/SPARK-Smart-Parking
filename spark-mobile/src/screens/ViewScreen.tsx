@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,57 +7,116 @@ import {
   Image,
   TouchableOpacity,
   TextInput,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import {
+  getParkingAreas,
+  getSnapshotUrl,
+  ParkingAreaWithStatus,
+} from "../services/api";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function statusColor(label: string): string {
+  switch (label) {
+    case "available": return "#3D5E39";
+    case "limited": return "#F2C94C";
+    case "full": return "#D92E3F";
+    default: return "#3D5E39";
+  }
+}
+
+function formatDate(dateStr?: string): string {
+  if (!dateStr) return "N/A";
+  try {
+    const d = new Date(dateStr);
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]} ${String(d.getFullYear()).slice(2)}, ${String(d.getHours()).padStart(2, "0")}.${String(d.getMinutes()).padStart(2, "0")}`;
+  } catch {
+    return "N/A";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 export default function ViewScreen() {
   const navigation = useNavigation();
 
-  const [searchText, setSearchText] =
-    useState("");
+  const [searchText, setSearchText] = useState("");
+  const [areas, setAreas] = useState<ParkingAreaWithStatus[]>([]);
+  const [selectedLocation, setSelectedLocation] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const [selectedLocation, setSelectedLocation] =
-    useState("LABTEK 5");
+  // Fetch data
+  const fetchData = useCallback(async () => {
+    try {
+      const data = await getParkingAreas();
+      setAreas(data);
+      if (data.length > 0 && !selectedLocation) {
+        setSelectedLocation(data[0].name);
+      }
+    } catch (e) {
+      console.error("ViewScreen fetch error:", e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
-  const ganeshaLocations = [
-    "Labtek 5",
-    "Labtek 8",
-    "FSRD",
-    "GKUB",
-    "GKUT",
-    "CADL",
-    "Aula Barat",
-    "Aula Timur",
-  ];
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  const jatinangorLocations = [
-    "GKU 1",
-    "GKU 2",
-    "GKU 3",
-    "Rektorat",
-  ];
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchData();
+  };
 
-  const allLocations = [
-    ...ganeshaLocations,
-    ...jatinangorLocations,
-  ];
+  // Separate by campus
+  const ganeshaAreas = areas.filter((a) => a.latitude > -6.92);
+  const jatinangorAreas = areas.filter((a) => a.latitude <= -6.92);
 
-  const filteredLocations =
-    allLocations.filter((item) =>
-      item
-        .toLowerCase()
-        .includes(searchText.toLowerCase())
+  // Filter by search
+  const filteredGanesha = ganeshaAreas.filter((a) =>
+    a.name.toLowerCase().includes(searchText.toLowerCase())
+  );
+  const filteredJatinangor = jatinangorAreas.filter((a) =>
+    a.name.toLowerCase().includes(searchText.toLowerCase())
+  );
+
+  // Selected area details
+  const selectedArea = areas.find((a) => a.name === selectedLocation);
+  const snapshotUrl = selectedArea?.camera_device_id
+    ? getSnapshotUrl(selectedArea.camera_device_id)
+    : null;
+
+  // Last updated timestamp
+  const lastUpdated = selectedArea?.updated_at || selectedArea?.captured_at;
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
+        <ActivityIndicator size="large" color="#D92E3F" />
+      </View>
     );
+  }
 
   return (
     <ScrollView
       style={styles.container}
       showsVerticalScrollIndicator={false}
-      contentContainerStyle={{
-        paddingBottom: 120,
-      }}
+      contentContainerStyle={{ paddingBottom: 120 }}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#D92E3F"]} />
+      }
     >
       {/* HEADER */}
       <View style={styles.header}>
@@ -67,11 +126,7 @@ export default function ViewScreen() {
         />
 
         <TouchableOpacity
-          onPress={() =>
-            navigation.navigate(
-              "Profile" as never
-            )
-          }
+          onPress={() => navigation.navigate("Profile" as never)}
         >
           <Ionicons
             name="person-circle"
@@ -96,7 +151,7 @@ export default function ViewScreen() {
             </Text>
 
             <Text style={styles.lastUpdated}>
-              Last updated on Wed 23 May 26, 15.00
+              Last updated on {formatDate(lastUpdated as string)}
             </Text>
           </View>
         </View>
@@ -126,10 +181,18 @@ export default function ViewScreen() {
         </Text>
 
         <View style={styles.cameraBox}>
-          <Image
-            source={require("../../assets/images/live-feed.jpg")}
-            style={styles.cameraImage}
-          />
+          {snapshotUrl ? (
+            <Image
+              source={{ uri: snapshotUrl }}
+              style={styles.cameraImage}
+              defaultSource={require("../../assets/images/live-feed.jpg")}
+            />
+          ) : (
+            <Image
+              source={require("../../assets/images/live-feed.jpg")}
+              style={styles.cameraImage}
+            />
+          )}
 
           <View style={styles.liveBadge}>
             <Text style={styles.liveText}>
@@ -147,7 +210,7 @@ export default function ViewScreen() {
             </Text>
           </Text>
 
-          <TouchableOpacity>
+          <TouchableOpacity onPress={onRefresh}>
             <Text style={styles.refresh}>
               ↻ Refresh Feed
             </Text>
@@ -166,31 +229,36 @@ export default function ViewScreen() {
         </Text>
 
         <View style={styles.locationGrid}>
-          {filteredLocations
-            .slice(0, 8)
-            .map((item, index) => (
-              <TouchableOpacity
-                key={index}
+          {filteredGanesha.map((area) => (
+            <TouchableOpacity
+              key={area.id}
+              style={[
+                styles.locationButton,
+                selectedLocation === area.name && styles.activeLocation,
+                { borderColor: statusColor(area.status_label) },
+              ]}
+              onPress={() => setSelectedLocation(area.name)}
+            >
+              <Text
                 style={[
-                  styles.locationButton,
-                  selectedLocation === item &&
-                    styles.activeLocation,
+                  styles.locationText,
+                  selectedLocation === area.name && styles.activeText,
                 ]}
-                onPress={() =>
-                  setSelectedLocation(item)
-                }
               >
-                <Text
-                  style={[
-                    styles.locationText,
-                    selectedLocation === item &&
-                      styles.activeText,
-                  ]}
-                >
-                  {item}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                {area.name}
+              </Text>
+              <Text
+                style={[
+                  styles.locationSpots,
+                  selectedLocation === area.name
+                    ? { color: "#FFF" }
+                    : { color: statusColor(area.status_label) },
+                ]}
+              >
+                {area.status_label === "full" ? "Full" : `${area.available_slots} spots`}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         <Text style={styles.locationSubtitle}>
@@ -198,31 +266,36 @@ export default function ViewScreen() {
         </Text>
 
         <View style={styles.locationGrid}>
-          {filteredLocations
-            .slice(8,12)
-            .map((item, index) => (
-              <TouchableOpacity
-                key={index}
+          {filteredJatinangor.map((area) => (
+            <TouchableOpacity
+              key={area.id}
+              style={[
+                styles.locationButton,
+                selectedLocation === area.name && styles.activeLocation,
+                { borderColor: statusColor(area.status_label) },
+              ]}
+              onPress={() => setSelectedLocation(area.name)}
+            >
+              <Text
                 style={[
-                  styles.locationButton,
-                  selectedLocation === item &&
-                    styles.activeLocation,
+                  styles.locationText,
+                  selectedLocation === area.name && styles.activeText,
                 ]}
-                onPress={() =>
-                  setSelectedLocation(item)
-                }
               >
-                <Text
-                  style={[
-                    styles.locationText,
-                    selectedLocation === item &&
-                      styles.activeText,
-                  ]}
-                >
-                  {item}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                {area.name}
+              </Text>
+              <Text
+                style={[
+                  styles.locationSpots,
+                  selectedLocation === area.name
+                    ? { color: "#FFF" }
+                    : { color: statusColor(area.status_label) },
+                ]}
+              >
+                {area.status_label === "full" ? "Full" : `${area.available_slots} spots`}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
 
@@ -451,6 +524,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
+  locationSpots: {
+    fontFamily: "PoppinsRegular",
+    fontSize: 10,
+    marginTop: 2,
+  },
+
   activeText: {
     color: "#FFF",
   },
@@ -487,22 +566,22 @@ const styles = StyleSheet.create({
   },
 
   heroSection: {
-  minHeight: 150,
-  justifyContent: "center",
-  zIndex: 2,
-},
+    minHeight: 150,
+    justifyContent: "center",
+    zIndex: 2,
+  },
 
-textContainer: {
-  zIndex: 2,
-  width: "90%",
-  marginTop: -135,
-},
+  textContainer: {
+    zIndex: 2,
+    width: "90%",
+    marginTop: -135,
+  },
 
-heroWrapper: {
-  position: "relative",
-  marginTop: 20,
+  heroWrapper: {
+    position: "relative",
+    marginTop: 20,
 
-  marginHorizontal: -24,
-  paddingHorizontal: 24,
-},
+    marginHorizontal: -24,
+    paddingHorizontal: 24,
+  },
 });
