@@ -28,6 +28,13 @@ export default function RegisterScreen() {
     setConfirmPasswordVisible,
   ] = useState(false);
 
+  const [selectedRole, setSelectedRole] =
+    useState("");
+
+  const [showRoleDropdown,
+    setShowRoleDropdown] =
+    useState(false);
+
   return (
     <ImageBackground
       source={require("../../assets/images/login-bg.png")}
@@ -181,28 +188,89 @@ export default function RegisterScreen() {
           </View>
 
           {/* ROLE */}
-          <TouchableOpacity
-            style={styles.inputContainer}
-          >
-            <MaterialIcons
-              name="person"
-              size={22}
-              color="#D14A3D"
-            />
-
-            <Text
-              style={styles.roleText}
+          <View style={{ width: "100%" }}>
+            <TouchableOpacity
+              style={styles.inputContainer}
+              onPress={() =>
+                setShowRoleDropdown(
+                  !showRoleDropdown
+                )
+              }
             >
-              Choose role..
-            </Text>
+              <MaterialIcons
+                name="person"
+                size={22}
+                color="#D14A3D"
+              />
 
-            <Ionicons
-              name="chevron-down"
-              size={24}
-              color="#D92E2F"
-            />
-          </TouchableOpacity>
+              <Text style={styles.roleText}>
+                {selectedRole ||
+                  "Choose role.."}
+              </Text>
 
+              <Ionicons
+                name={
+                  showRoleDropdown
+                    ? "chevron-up"
+                    : "chevron-down"
+                }
+                size={24}
+                color="#D92E2F"
+              />
+            </TouchableOpacity>
+
+            {showRoleDropdown && (
+              <View
+                style={
+                  styles.dropdownContainer
+                }
+              >
+                <TouchableOpacity
+                  style={
+                    styles.dropdownItem
+                  }
+                  onPress={() => {
+                    setSelectedRole(
+                      "Mahasiswa"
+                    );
+                    setShowRoleDropdown(
+                      false
+                    );
+                  }}
+                >
+                  <Text
+                    style={
+                      styles.dropdownText
+                    }
+                  >
+                    Mahasiswa
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={
+                    styles.dropdownItem
+                  }
+                  onPress={() => {
+                    setSelectedRole(
+                      "Tenaga Pendidik"
+                    );
+                    setShowRoleDropdown(
+                      false
+                    );
+                  }}
+                >
+                  <Text
+                    style={
+                      styles.dropdownText
+                    }
+                  >
+                    Tenaga Pendidik
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
           {/* BUTTON */}
           <TouchableOpacity
             style={styles.signUpButton}
@@ -374,4 +442,31 @@ const styles = StyleSheet.create({
     fontFamily: "PoppinsBold",
     fontSize: 18,
   },
+  dropdownContainer: {
+  width: "100%",
+  backgroundColor: "#FFF",
+
+  borderWidth: 1.5,
+  borderColor: "#F0C8C8",
+
+  borderRadius: 18,
+  marginTop: -8,
+  marginBottom: 16,
+
+  overflow: "hidden",
+},
+
+dropdownItem: {
+  paddingVertical: 14,
+  paddingHorizontal: 20,
+
+  borderBottomWidth: 1,
+  borderBottomColor: "#F6E2E2",
+},
+
+dropdownText: {
+  fontFamily: "PoppinsMedium",
+  fontSize: 14,
+  color: "#444",
+},
 });
