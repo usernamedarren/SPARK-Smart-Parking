@@ -25,7 +25,7 @@ parking_areas = [
         "location_description": "ITB Ganesha - Labtek V / SR Area",
         "latitude": -6.8905,
         "longitude": 107.6100,
-        "total_slots": 20,
+        "total_slots": 12,
         "camera_device_id": "CAM-TEST"
     },
     {
