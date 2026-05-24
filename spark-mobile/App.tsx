@@ -29,8 +29,11 @@ import {
 import HomeScreen from "./src/screens/HomeScreen";
 import MapScreen from "./src/screens/MapScreen";
 import PredictionScreen from "./src/screens/PredictionScreen";
-import HistoryScreen from "./src/screens/HistoryScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
+import SignInScreen from "@/screens/SignInScreen";
+import RegisterScreen from "./src/screens/RegisterScreen";
+import DetailParkingScreen from "./src/screens/DetailParkingScreen";
+import ViewScreen from "./src/screens/ViewScreen";
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -163,10 +166,10 @@ function BottomTabs() {
         }}
       />
 
-      {/* HISTORY */}
+      {/* VIEW */}
       <Tab.Screen
-        name="History"
-        component={HistoryScreen}
+        name="View"
+        component={ViewScreen}
         options={{
           tabBarIcon: ({ focused }) => (
             <View
@@ -230,13 +233,24 @@ export default function App() {
         }}
       >
         <Stack.Screen
+          name="SignIn"
+          component={SignInScreen}
+        />
+        <Stack.Screen
           name="MainTabs"
           component={BottomTabs}
         />
-
         <Stack.Screen
           name="Profile"
           component={ProfileScreen}
+        />
+        <Stack.Screen
+          name="Register"
+          component={RegisterScreen}
+        />
+        <Stack.Screen
+          name="DetailParking"
+          component={DetailParkingScreen}
         />
       </Stack.Navigator>
     </NavigationContainer>

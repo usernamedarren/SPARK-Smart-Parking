@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -8,20 +8,43 @@ import {
   ScrollView,
 } from "react-native";
 
-import {
-  Ionicons,
-  Feather,
-} from "@expo/vector-icons";
-
+import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 
 export default function PredictionScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
+
+  const [selectedCampus, setSelectedCampus] =
+    useState("");
+
+  const [showCampusOptions, setShowCampusOptions] =
+    useState(false);
+
+  const ganeshaLocations = [
+    "LABTEK 5",
+    "LABTEK 8",
+    "FSRD",
+    "GKUB",
+    "GKUT",
+    "CADL",
+    "ALBAR",
+    "ALTIM",
+  ];
+
+  const jatinangorLocations = [
+    "GKU 1",
+    "GKU 2",
+    "GKU 3",
+    "REKTORAT",
+  ];
+
   return (
     <ScrollView
       style={styles.container}
       showsVerticalScrollIndicator={false}
-      contentContainerStyle={{ paddingBottom: 90 }}
+      contentContainerStyle={{
+        paddingBottom: 90,
+      }}
     >
       {/* HEADER */}
       <View style={styles.header}>
@@ -29,20 +52,23 @@ export default function PredictionScreen() {
           source={require("../../assets/images/spark-logo.png")}
           style={styles.logo}
         />
+
         <TouchableOpacity
-        onPress={() =>
-            navigation.navigate("Profile" as never)
-        }
+          onPress={() =>
+            navigation.navigate(
+              "Profile" as never
+            )
+          }
         >
-        <Ionicons
-          name="person-circle"
-          size={45}
-          color="#D92E3F"
-        />
+          <Ionicons
+            name="person-circle"
+            size={45}
+            color="#D92E3F"
+          />
         </TouchableOpacity>
       </View>
 
-      {/* CITY IMAGE */}
+      {/* CITY BG */}
       <Image
         source={require("../../assets/images/city-bg.png")}
         style={styles.cityImage}
@@ -53,100 +79,189 @@ export default function PredictionScreen() {
         Prediction
       </Text>
 
-      {/* PREDICTION BOX */}
+      {/* PREDICT BOX */}
       <View style={styles.predictBox}>
         <Text style={styles.predictTitle}>
           Predict Parking Availability
         </Text>
 
         {/* WHERE */}
-        <TouchableOpacity style={styles.whereBox}>
+        <TouchableOpacity
+          style={styles.whereBox}
+          onPress={() =>
+            setShowCampusOptions(
+              !showCampusOptions
+            )
+          }
+        >
           <View style={styles.row}>
             <Ionicons
               name="location"
-              size={28}
+              size={22}
               color="#D92E3F"
             />
 
-            <View style={{ marginLeft: 14 }}>
-              <Text style={styles.whereTitle}>
+            <View
+              style={{
+                marginLeft: 14,
+              }}
+            >
+              <Text
+                style={
+                  styles.whereTitle
+                }
+              >
                 Where?
               </Text>
 
-              <Text style={styles.whereSubtitle}>
-                Select destination.....
+              <Text
+                style={
+                  styles.whereSubtitle
+                }
+              >
+                {selectedCampus ||
+                  "Select destination....."}
               </Text>
             </View>
           </View>
 
           <Ionicons
-            name="chevron-forward"
-            size={30}
+            name="chevron-down"
+            size={24}
             color="#D92E3F"
           />
         </TouchableOpacity>
 
-        {/* DATE */}
-        <View style={styles.dateBox}>
-          <View style={styles.row}>
-            <Ionicons
-              name="calendar"
-              size={24}
-              color="#D97A3A"
+{/* CAMPUS OPTIONS */}
+{showCampusOptions && (
+  <View style={styles.optionContainer}>
+    <TouchableOpacity
+      style={styles.optionButton}
+      onPress={() => {
+        setSelectedCampus(
+          "GANESHA"
+        );
+        setShowCampusOptions(
+          false
+        );
+      }}
+    >
+      <Text style={styles.optionText}>
+        Ganesha
+      </Text>
+    </TouchableOpacity>
+
+    <TouchableOpacity
+      style={styles.optionButton}
+      onPress={() => {
+        setSelectedCampus(
+          "JATINANGOR"
+        );
+        setShowCampusOptions(
+          false
+        );
+      }}
+    >
+      <Text style={styles.optionText}>
+        Jatinangor
+      </Text>
+    </TouchableOpacity>
+  </View>
+)}
+</View>
+
+    {/* RECOMMEND */}
+    {selectedCampus !== "" && (
+      <>
+        <Text
+          style={styles.recommendTitle}
+        >
+          Recommend Parking
+        </Text>
+
+        <Text
+          style={
+            styles.recommendSubtitle
+          }
+        >
+          Prediction based on
+          real-time and historical
+          data estimation
+        </Text>
+
+        {(
+          selectedCampus ===
+          "GANESHA"
+            ? ganeshaLocations
+            : [
+                "GKU 1",
+                "GKU 2",
+                "REKTORAT",
+              ]
+        ).map(
+          (location, index) => (
+            <ParkingCard
+              key={location}
+              color={
+                index % 3 === 0
+                  ? "#406A43"
+                  : index % 3 === 1
+                  ? "#D92E3F"
+                  : "#F2C94C"
+              }
+              status={
+                index % 3 === 0
+                  ? "Available"
+                  : index % 3 === 1
+                  ? "Full"
+                  : "Limited"
+              }
+              spots={
+                index % 3 === 0
+                  ? "24"
+                  : index % 3 === 1
+                  ? "0"
+                  : "4"
+              }
+              title={location}
+              icon={
+                index % 3 === 0
+                  ? "checkmark-circle"
+                  : index % 3 === 1
+                  ? "close-circle"
+                  : "alert-circle"
+              }
+              note={
+                index % 3 === 0
+                  ? "Most likely available on arrival"
+                  : index % 3 === 1
+                  ? "Not available on arrival"
+                  : "Likely available on arrival"
+              }
+                onNavigate={() =>
+                navigation.navigate(
+                  "DetailParking" as never,
+                  {
+                    selectedLocation:
+                        location === "LABTEK 5"
+                          ? "Labtek 5"
+                          : location === "LABTEK 8"
+                          ? "Labtek 8"
+                          : location === "ALBAR"
+                          ? "Aula Barat"
+                          : location === "ALTIM"
+                          ? "Aula Timur"
+                          : location === "REKTORAT"
+                          ? "Rektorat"
+                          : location,
+                  } as never
+                )
+              }
             />
-
-            <Text style={styles.dateText}>
-              25 Apr  |  09:00
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            style={styles.predictButton}
-          >
-            <Text style={styles.predictBtnText}>
-              PREDICT
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* RECOMMEND */}
-      <Text style={styles.recommendTitle}>
-        Recommend Parking
-      </Text>
-
-      <Text style={styles.recommendSubtitle}>
-        Prediction based on real-time
-        and historical data estimation
-      </Text>
-
-      {/* CARDS */}
-      <ParkingCard
-        color="#406A43"
-        status="Available"
-        spots="24"
-        title="GKU Timur Parking"
-        icon="checkmark-circle"
-        note="Most likely available on arrival"
-      />
-
-      <ParkingCard
-        color="#D92E3F"
-        status="Full"
-        spots="0"
-        title="GKU Timur Parking"
-        icon="close-circle"
-        note="Not available on arrival"
-      />
-
-      <ParkingCard
-        color="#F2C94C"
-        status="Limited"
-        spots="4"
-        title="GKU Timur Parking"
-        icon="alert-circle"
-        note="Likely available on arrival"
-      />
+          )
+        )}
+      </>
+    )}
     </ScrollView>
   );
 }
@@ -159,6 +274,7 @@ function ParkingCard({
   title,
   icon,
   note,
+  onNavigate,
 }: any) {
   return (
     <View style={styles.card}>
@@ -166,37 +282,64 @@ function ParkingCard({
         <View
           style={[
             styles.parkingIcon,
-            { backgroundColor: color },
+            {
+              backgroundColor:
+                color,
+            },
           ]}
         >
-          <Text style={styles.pText}>
+          <Text
+            style={styles.pText}
+          >
             P
           </Text>
         </View>
 
         <View style={{ flex: 1 }}>
-          <Text style={styles.cardTitle}>
+          <Text
+            style={
+              styles.cardTitle
+            }
+          >
             {title}
           </Text>
 
-          <View style={styles.infoRow}>
+          <View
+            style={
+              styles.infoRow
+            }
+          >
             <Ionicons
               name="walk"
               size={18}
               color={color}
             />
-            <Text style={styles.walkText}>
+
+            <Text
+              style={
+                styles.walkText
+              }
+            >
               3 min walk
             </Text>
           </View>
 
-          <View style={styles.infoRow}>
+          <View
+            style={
+              styles.infoRow
+            }
+          >
             <Ionicons
               name={icon}
               size={18}
               color={color}
             />
-            <Text style={styles.noteText}>
+
+            <Text
+              style={
+                styles.noteText
+              }
+            >
               {note}
             </Text>
           </View>
@@ -205,8 +348,14 @@ function ParkingCard({
 
       <View style={styles.line} />
 
-      <View style={styles.cardBottom}>
-        <View style={styles.row}>
+      <View
+        style={
+          styles.cardBottom
+        }
+      >
+        <View
+          style={styles.row}
+        >
           <View
             style={[
               styles.statusBadge,
@@ -227,22 +376,30 @@ function ParkingCard({
             </Text>
           </View>
 
-          <Text style={styles.spotText}>
+          <Text
+            style={
+              styles.spotText
+            }
+          >
             {spots} spots
           </Text>
         </View>
 
         <TouchableOpacity
-          style={[
-            styles.navigateBtn,
-            { borderColor: color },
-          ]}
-        >
+            style={[
+              styles.navigateBtn,
+              {
+                borderColor: color,
+              },
+            ]}
+            onPress={onNavigate}
+          >
           <Ionicons
             name="location"
             size={18}
             color={color}
           />
+
           <Text
             style={{
               color,
@@ -267,10 +424,10 @@ const styles = StyleSheet.create({
     paddingTop: 55,
   },
 
-  /* HEADER */
   header: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent:
+      "space-between",
     alignItems: "center",
   },
 
@@ -284,62 +441,72 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 20,
     right: -35,
-
     width: 250,
     height: 110,
-
     resizeMode: "contain",
   },
 
-  /* TITLE */
   title: {
-    fontFamily: "PoppinsBold",
+    fontFamily:
+      "PoppinsBold",
     fontSize: 28,
     color: "#D92E3F",
-
     marginTop: 10,
     marginBottom: 22,
   },
 
-  /* PREDICT BOX */
   predictBox: {
-    backgroundColor: "#FAF8F6",
-
+    backgroundColor:
+      "#FAF8F6",
     borderWidth: 1.2,
     borderColor: "#F0C8C8",
-
     borderRadius: 22,
-
     padding: 16,
     marginBottom: 18,
   },
 
   predictTitle: {
-    fontFamily: "PoppinsBold",
+    fontFamily:
+      "PoppinsBold",
     fontSize: 16,
     color: "#D92E3F",
-
     marginBottom: 12,
   },
 
-  /* WHERE */
   whereBox: {
     backgroundColor: "#fff",
-
     borderWidth: 1,
     borderColor: "#F0C8C8",
-
     borderRadius: 22,
-
-    height: 56,
-
+    minHeight: 56,
     paddingHorizontal: 20,
-
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent:
+      "space-between",
     alignItems: "center",
+  },
 
-    marginBottom: 16,
+  optionContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 12,
+  },
+
+  optionButton: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#F0C8C8",
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+
+  optionText: {
+    fontFamily:
+      "PoppinsMedium",
+    color: "#444",
+    fontSize: 12,
   },
 
   row: {
@@ -348,86 +515,41 @@ const styles = StyleSheet.create({
   },
 
   whereTitle: {
-    fontFamily: "PoppinsSemiBold",
+    fontFamily:
+      "PoppinsSemiBold",
     fontSize: 14,
     color: "#111",
   },
 
   whereSubtitle: {
-    fontFamily: "PoppinsRegular",
+    fontFamily:
+      "PoppinsRegular",
     fontSize: 11,
     color: "#8A8A8A",
     marginTop: -2,
   },
 
-  /* DATE BOX */
-  dateBox: {
-    backgroundColor: "#fff",
-
-    borderWidth: 1,
-    borderColor: "#F0C8C8",
-
-    borderRadius: 22,
-
-    height: 50,
-
-    paddingHorizontal: 20,
-
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  dateText: {
-    marginLeft: 12,
-    fontFamily: "PoppinsMedium",
-    fontSize: 13,
-    color: "#222",
-  },
-
-  predictButton: {
-    backgroundColor: "#D92E3F",
-
-    paddingHorizontal: 22,
-    height: 25,
-
-    borderRadius: 20,
-
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  predictBtnText: {
-    color: "#fff",
-    fontFamily: "PoppinsBold",
-    fontSize: 13,
-  },
-
-  /* RECOMMEND */
   recommendTitle: {
-    fontFamily: "PoppinsBold",
+    fontFamily:
+      "PoppinsBold",
     fontSize: 16,
     color: "#D92E3F",
   },
 
   recommendSubtitle: {
-    fontFamily: "PoppinsRegular",
+    fontFamily:
+      "PoppinsRegular",
     fontSize: 13,
     color: "#222",
-
     marginTop: 2,
     marginBottom: 12,
   },
 
-  /* CARD */
   card: {
     backgroundColor: "#fff",
-
     borderRadius: 22,
-
     borderWidth: 1.2,
     borderColor: "#F0C8C8",
-
     padding: 14,
     marginBottom: 10,
   },
@@ -440,24 +562,23 @@ const styles = StyleSheet.create({
   parkingIcon: {
     width: 42,
     height: 42,
-
     borderRadius: 10,
-
-    justifyContent: "center",
+    justifyContent:
+      "center",
     alignItems: "center",
   },
 
   pText: {
     color: "#fff",
-    fontFamily: "PoppinsBold",
+    fontFamily:
+      "PoppinsBold",
     fontSize: 22,
   },
 
   cardTitle: {
-    fontFamily: "PoppinsBold",
+    fontFamily:
+      "PoppinsBold",
     fontSize: 14,
-    color: "#111",
-
     marginBottom: 8,
   },
 
@@ -469,58 +590,54 @@ const styles = StyleSheet.create({
 
   walkText: {
     marginLeft: 6,
-    fontFamily: "PoppinsRegular",
     fontSize: 11,
     color: "#444",
   },
 
   noteText: {
     marginLeft: 6,
-    fontFamily: "PoppinsRegular",
     fontSize: 11,
     color: "#444",
   },
 
   line: {
     height: 1,
-    backgroundColor: "#ECECEC",
-
+    backgroundColor:
+      "#ECECEC",
     marginVertical: 18,
   },
 
   cardBottom: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent:
+      "space-between",
     alignItems: "center",
   },
 
   statusBadge: {
     paddingHorizontal: 12,
     height: 28,
-
     borderRadius: 18,
-
-    justifyContent: "center",
+    justifyContent:
+      "center",
     alignItems: "center",
   },
 
   spotText: {
     marginLeft: 12,
-    fontFamily: "PoppinsBold",
+    fontFamily:
+      "PoppinsBold",
     fontSize: 13,
-    color: "#222",
   },
 
   navigateBtn: {
     borderWidth: 2,
-
     height: 34,
     paddingHorizontal: 12,
-
     borderRadius: 22,
-
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent:
+      "center",
   },
 });

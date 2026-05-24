@@ -171,6 +171,7 @@ const navigation = useNavigation();
       {/* LOGOUT */}
       <TouchableOpacity
         style={styles.logoutButton}
+        onPress={() => {navigation.navigate("SignIn" as never);}}
       >
         <MaterialCommunityIcons
           name="logout"

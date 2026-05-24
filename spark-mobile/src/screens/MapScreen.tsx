@@ -3,286 +3,425 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   Image,
+  TouchableOpacity,
 } from "react-native";
 
-import MapView, { Marker } from "react-native-maps";
+import MapView, {
+  Marker,
+} from "react-native-maps";
 
 import {
   Ionicons,
   Feather,
-  MaterialCommunityIcons,
 } from "@expo/vector-icons";
 
-import { useNavigation } from "@react-navigation/native";
+import {
+  useNavigation,
+} from "@react-navigation/native";
 
 export default function MapScreen() {
-  const navigation = useNavigation();
+  const navigation =
+    useNavigation<any>();
+
   const [selected, setSelected] =
     useState("All");
+  
+  const [selectedCampus,
+    setSelectedCampus] =
+    useState("Ganesha");
+
+  const [showDropdown, setShowDropdown] =
+    useState(false);
+
+  const campusLocations = {
+  Ganesha: [
+    {
+      name: "Labtek 5",
+      spots: "20 spots",
+      color: "#406A43",
+      latitude: -6.8915,
+      longitude: 107.6107,
+    },
+    {
+      name: "Labtek 8",
+      spots: "5 spots",
+      color: "#F2C94C",
+      latitude: -6.8919,
+      longitude: 107.6116,
+    },
+    {
+      name: "FSRD",
+      spots: "Full",
+      color: "#D92E3F",
+      latitude: -6.8932,
+      longitude: 107.612,
+    },
+    {
+      name: "GKUB",
+      spots: "12 spots",
+      color: "#406A43",
+      latitude: -6.8923,
+      longitude: 107.6101,
+    },
+    {
+      name: "GKUT",
+      spots: "Limited",
+      color: "#F2C94C",
+      latitude: -6.8928,
+      longitude: 107.6098,
+    },
+    {
+      name: "CADL",
+      spots: "15 spots",
+      color: "#406A43",
+      latitude: -6.8909,
+      longitude: 107.611,
+    },
+    {
+      name: "Aula Barat",
+      spots: "Full",
+      color: "#D92E3F",
+      latitude: -6.891,
+      longitude: 107.6089,
+    },
+    {
+      name: "Aula Timur",
+      spots: "8 spots",
+      color: "#F2C94C",
+      latitude: -6.892,
+      longitude: 107.6127,
+    },
+  ],
+
+  Jatinangor: [
+    {
+      name: "GKU 1",
+      spots: "18 spots",
+      color: "#406A43",
+      latitude: -6.9314,
+      longitude: 107.7704,
+    },
+    {
+      name: "GKU 2",
+      spots: "Limited",
+      color: "#F2C94C",
+      latitude: -6.9308,
+      longitude: 107.7712,
+    },
+    {
+      name: "GKU 3",
+      spots: "Full",
+      color: "#D92E3F",
+      latitude: -6.9319,
+      longitude: 107.772,
+    },
+    {
+      name: "Rektorat",
+      spots: "9 spots",
+      color: "#406A43",
+      latitude: -6.9299,
+      longitude: 107.7708,
+    },
+  ],
+};
+
+const currentLocations =
+  campusLocations[
+    selectedCampus as keyof typeof campusLocations
+  ];
+
+  const filteredLocations =
+    selected === "All"
+      ? currentLocations
+      : currentLocations.filter(
+          (item) =>
+            item.name === selected
+        );
+
+  const dropdownLocations =
+    selectedCampus ===
+    "Ganesha"
+      ? [
+          "GKUB",
+          "GKUT",
+          "CADL",
+          "Aula Barat",
+          "Aula Timur",
+        ]
+      : [];
 
   return (
     <View style={styles.container}>
-
       {/* HEADER */}
       <View style={styles.header}>
-        <View style={styles.logoRow}>
-          <Image
-            source={require("../../assets/images/spark-logo.png")}
-            style={styles.logoImage}
-          />
-        </View>
-        <TouchableOpacity
-        onPress={() =>
-            navigation.navigate("Profile" as never)
-        }
-        >
-        <Ionicons
-          name="person-circle"
-          size={45}
-          color="#D92E3F"
+        <Image
+          source={require("../../assets/images/spark-logo.png")}
+          style={styles.logoImage}
         />
+
+        <TouchableOpacity
+          onPress={() =>
+            navigation.navigate(
+              "Profile"
+            )
+          }
+        >
+          <Ionicons
+            name="person-circle"
+            size={45}
+            color="#D92E3F"
+          />
         </TouchableOpacity>
       </View>
 
-      {/* FILTER BAR */}
-      <View style={styles.filterContainer}>
-
+      {/* CAMPUS SELECTOR */}
+      <View style={styles.campusContainer}>
         {[
-          "All",
-          "Labtek 5",
-          "Labtek 8",
-          "FSRD",
-        ].map((item) => (
+          "Ganesha",
+          "Jatinangor",
+        ].map((campus) => (
           <TouchableOpacity
-            key={item}
+            key={campus}
             style={[
-              styles.filterChip,
-              selected === item &&
-                styles.activeChip,
+              styles.campusChip,
+              selectedCampus ===
+                campus &&
+                styles.activeCampus,
             ]}
-            onPress={() =>
-              setSelected(item)
-            }
+            onPress={() => {
+              setSelectedCampus(
+                campus
+              );
+
+              setSelected("All");
+            }}
           >
             <Text
               style={[
-                styles.filterText,
-                selected === item &&
-                  styles.activeChipText,
+                styles.campusText,
+                selectedCampus ===
+                  campus &&
+                  styles.activeCampusText,
               ]}
             >
-              {item}
+              {campus}
             </Text>
           </TouchableOpacity>
         ))}
-
-        <Feather
-          name="sliders"
-          size={18}
-          color="#D92E3F"
-        />
       </View>
 
-      {/* LOCATE BUTTON */}
-      <TouchableOpacity
-        style={styles.locateBtn}
+{/* FILTER */}
+<View style={styles.filterContainer}>
+  {(selectedCampus ===
+  "Ganesha"
+    ? [
+        "All",
+        "Labtek 5",
+        "Labtek 8",
+        "FSRD",
+      ]
+    : [
+        "All",
+        "GKU 1",
+        "GKU 2",
+        "GKU 3",
+        "Rektorat",
+      ]
+  ).map((item) => (
+    <TouchableOpacity
+      key={item}
+      style={[
+        styles.filterChip,
+        selected === item &&
+          styles.activeChip,
+      ]}
+      onPress={() =>
+        setSelected(item)
+      }
+    >
+      <Text
+        style={[
+          styles.filterText,
+          selected === item &&
+            styles.activeChipText,
+        ]}
       >
-        <Ionicons
-          name="location"
-          size={15}
-          color="#fff"
-        />
+        {item}
+      </Text>
+    </TouchableOpacity>
+  ))}
 
-        <Text style={styles.locateText}>
-          Locate Me
-        </Text>
-      </TouchableOpacity>
+  {/* DROPDOWN ONLY GANESHA */}
+  {selectedCampus ===
+    "Ganesha" && (
+    <TouchableOpacity
+      style={
+        styles.dropdownButton
+      }
+      onPress={() =>
+        setShowDropdown(
+          !showDropdown
+        )
+      }
+    >
+      <Text
+        style={
+          styles.filterText
+        }
+      >
+        More
+      </Text>
+
+      <Ionicons
+        name={
+          showDropdown
+            ? "chevron-up"
+            : "chevron-down"
+        }
+        size={16}
+        color="#D92E3F"
+      />
+    </TouchableOpacity>
+  )}
+</View>
+
+      {/* DROPDOWN MENU */}
+      {showDropdown && (
+        <View
+          style={
+            styles.dropdownMenu
+          }
+        >
+          {dropdownLocations.map(
+            (location) => (
+              <TouchableOpacity
+                key={location}
+                style={
+                  styles.dropdownItem
+                }
+                onPress={() => {
+                  setSelected(
+                    location
+                  );
+
+                  setShowDropdown(
+                    false
+                  );
+                }}
+              >
+                <Text
+                  style={
+                    styles.dropdownText
+                  }
+                >
+                  {location}
+                </Text>
+              </TouchableOpacity>
+            )
+          )}
+        </View>
+      )}
 
       {/* MAP */}
-      <View style={styles.mapContainer}>
+      <View
+        style={
+          styles.mapContainer
+        }
+      >
         <MapView
           style={styles.map}
-          initialRegion={{
-            latitude: -6.8915,
-            longitude: 107.6107,
-            latitudeDelta: 0.006,
-            longitudeDelta: 0.006,
-          }}
-        >
-          {/* LABTEK 5 */}
-          <Marker
-            coordinate={{
-              latitude: -6.8915,
-              longitude: 107.6107,
-            }}
-          >
-            <View>
-              <View style={[
-                styles.marker,
-                { backgroundColor: "#406A43" }
-              ]}>
-                <Text style={styles.markerText}>
-                  P
-                </Text>
-              </View>
+          region={
+            selectedCampus ===
+            "Ganesha"
+              ? {
+                  latitude: -6.8915,
+                  longitude: 107.6107,
+                  latitudeDelta: 0.006,
+                  longitudeDelta: 0.006,
+                }
+              : {
+                  latitude: -6.9313,
+                  longitude: 107.771,
+                  latitudeDelta: 0.008,
+                  longitudeDelta: 0.008,
+                }
+          }>
+          {filteredLocations.map(
+            (location) => (
+              <Marker
+                key={
+                  location.name
+                }
+                coordinate={{
+                  latitude:
+                    location.latitude,
+                  longitude:
+                    location.longitude,
+                }}
+                onPress={() =>
+                  navigation.navigate(
+                    "DetailParking",
+                    {
+                      selectedLocation:
+                        location.name,
+                    }
+                  )
+                }
+              >
+                <TouchableOpacity>
+                  <View
+                    style={[
+                      styles.marker,
+                      {
+                        backgroundColor:
+                          location.color,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={
+                        styles.markerText
+                      }
+                    >
+                      P
+                    </Text>
+                  </View>
 
-              <View style={styles.popup}>
-                <Text style={styles.popupTitle}>
-                  Labtek 5
-                </Text>
+                  <View
+                    style={
+                      styles.popup
+                    }
+                  >
+                    <Text
+                      style={
+                        styles.popupTitle
+                      }
+                    >
+                      {
+                        location.name
+                      }
+                    </Text>
 
-                <Text style={styles.popupSubtitle}>
-                  20 spots
-                </Text>
-              </View>
-            </View>
-          </Marker>
-
-          {/* LABTEK 8 */}
-          <Marker
-            coordinate={{
-              latitude: -6.8919,
-              longitude: 107.6116,
-            }}
-          >
-            <View>
-              <View style={[
-                styles.marker,
-                { backgroundColor: "#F2C94C" }
-              ]}>
-                <Text style={styles.markerText}>
-                  P
-                </Text>
-              </View>
-
-              <View style={styles.popup}>
-                <Text style={styles.popupTitle}>
-                  Labtek 8
-                </Text>
-
-                <Text
-                  style={[
-                    styles.popupSubtitle,
-                    { color: "#F2C94C" }
-                  ]}
-                >
-                  5 spots
-                </Text>
-              </View>
-            </View>
-          </Marker>
-
-          {/* FSRD */}
-          <Marker
-            coordinate={{
-              latitude: -6.8932,
-              longitude: 107.6120,
-            }}
-          >
-            <View>
-              <View style={[
-                styles.marker,
-                { backgroundColor: "#D92E3F" }
-              ]}>
-                <Text style={styles.markerText}>
-                  P
-                </Text>
-              </View>
-
-              <View style={styles.popup}>
-                <Text style={styles.popupTitle}>
-                  FSRD
-                </Text>
-
-                <Text
-                  style={[
-                    styles.popupSubtitle,
-                    { color: "#D92E3F" }
-                  ]}
-                >
-                  Full
-                </Text>
-              </View>
-            </View>
-          </Marker>
+                    <Text
+                      style={[
+                        styles.popupSubtitle,
+                        {
+                          color:
+                            location.color,
+                        },
+                      ]}
+                    >
+                      {
+                        location.spots
+                      }
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              </Marker>
+            )
+          )}
         </MapView>
-      </View>
-
-      {/* LEGEND */}
-      <View style={styles.legendRow}>
-        <Text style={styles.legend}>
-          🟢 Available
-        </Text>
-
-        <Text style={styles.legend}>
-          🟡 Limited
-        </Text>
-
-        <Text style={styles.legend}>
-          🔴 Full
-        </Text>
-
-        <Text style={styles.legend}>
-          🔵 Your Location
-        </Text>
-      </View>
-
-      {/* NAVBAR */}
-      <View style={styles.bottomNav}>
-
-        <TouchableOpacity
-          style={styles.navItem}
-        >
-          <Ionicons
-            name="home-outline"
-            size={22}
-            color="#4B4B4B"
-          />
-          <Text style={styles.navText}>
-            Home
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.activeTab}
-        >
-          <Feather
-            name="map"
-            size={22}
-            color="#D92E3F"
-          />
-          <Text style={styles.activeTabText}>
-            Map
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.navItem}
-        >
-          <MaterialCommunityIcons
-            name="file-chart-outline"
-            size={22}
-            color="#4B4B4B"
-          />
-          <Text style={styles.navText}>
-            Prediction
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.navItem}
-        >
-          <Ionicons
-            name="reload-outline"
-            size={22}
-            color="#4B4B4B"
-          />
-          <Text style={styles.navText}>
-            History
-          </Text>
-        </TouchableOpacity>
       </View>
     </View>
   );
@@ -507,4 +646,57 @@ const styles = StyleSheet.create({
     color: "#D92E3F",
     marginTop: 2,
   },
+  dropdownButton: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 4,
+},
+
+dropdownMenu: {
+  backgroundColor: "#FFF",
+  borderRadius: 18,
+  borderWidth: 1,
+  borderColor: "#F0D7D7",
+  paddingVertical: 8,
+  marginTop: 8,
+},
+
+dropdownItem: {
+  paddingVertical: 10,
+  paddingHorizontal: 16,
+},
+
+dropdownText: {
+  fontFamily: "PoppinsMedium",
+  color: "#444",
+},
+
+campusContainer: {
+  flexDirection: "row",
+  marginTop: 8,
+  marginBottom: 12,
+  gap: 8,
+},
+
+campusChip: {
+  backgroundColor: "#EFEAE6",
+  paddingHorizontal: 18,
+  paddingVertical: 8,
+  borderRadius: 20,
+},
+
+activeCampus: {
+  backgroundColor: "#FBE6E3",
+},
+
+campusText: {
+  fontFamily: "PoppinsMedium",
+  color: "#777",
+  fontSize: 12,
+},
+
+activeCampusText: {
+  color: "#D92E3F",
+  fontFamily: "PoppinsSemiBold",
+},
 });
