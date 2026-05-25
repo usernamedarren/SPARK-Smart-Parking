@@ -89,7 +89,7 @@ const safeStorage = {
 // - Physical device on same Wi-Fi:  http://192.168.x.x:8000
 // - Android emulator:               http://10.0.2.2:8000
 // - iOS simulator:                   http://localhost:8000
-const API_BASE_URL = "http://172.20.10.3:8000";
+const API_BASE_URL = "https://prowling-unkind-arbitrate.ngrok-free.dev";
 
 const TOKEN_KEY = "spark_access_token";
 const REFRESH_KEY = "spark_refresh_token";
