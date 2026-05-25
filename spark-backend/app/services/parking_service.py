@@ -94,6 +94,7 @@ class ParkingService:
             area_status = statuses.get(area["id"], {})
             camera_id = area.get("camera_device_id")
             image_url = f"/static/snapshots/{camera_id}.jpg" if camera_id else None
+            slot_status = area_status.get("slot_status")
             combined.append({
                 **area,
                 "occupied_slots": area_status.get("occupied_slots", 0),
@@ -105,6 +106,7 @@ class ParkingService:
                 "captured_at": area_status.get("captured_at"),
                 "updated_at": area_status.get("updated_at"),
                 "image_url": image_url,
+                "slot_status": slot_status,
             })
 
         return combined
@@ -137,6 +139,7 @@ class ParkingService:
 
         camera_id = area.get("camera_device_id")
         image_url = f"/static/snapshots/{camera_id}.jpg" if camera_id else None
+        slot_status = area_status.get("slot_status")
 
         return {
             **area,
@@ -149,6 +152,7 @@ class ParkingService:
             "captured_at": area_status.get("captured_at"),
             "updated_at": area_status.get("updated_at"),
             "image_url": image_url,
+            "slot_status": slot_status,
         }
 
     async def update_status(
@@ -158,6 +162,7 @@ class ParkingService:
         available_slots: int,
         occupancy_rate: float,
         status_label: str,
+        slot_status: Optional[dict] = None,
     ) -> dict:
         """
         Upsert the current parking status for an area.
@@ -176,6 +181,8 @@ class ParkingService:
             "captured_at": now,
             "updated_at": now,
         }
+        if slot_status is not None:
+            data["slot_status"] = slot_status
 
         result = (
             admin.table("parking_status")

@@ -84,6 +84,7 @@ async def upload_image(
             available_slots=available,
             occupancy_rate=rate,
             status_label=label,
+            slot_status=prediction.get("slot_status"),
         )
 
         # Add history record
