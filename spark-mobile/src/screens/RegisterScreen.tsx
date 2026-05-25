@@ -8,6 +8,8 @@ import {
   TextInput,
   ImageBackground,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
 } from "react-native";
 
@@ -74,18 +76,24 @@ export default function RegisterScreen() {
       style={styles.container}
       resizeMode="cover"
     >
-      <ScrollView
-        contentContainerStyle={styles.overlay}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
       >
-        {/* LOGO */}
-        <Image
-          source={require("../../assets/images/spark-logo.png")}
-          style={styles.logo}
-        />
+        <ScrollView
+          contentContainerStyle={styles.overlay}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* LOGO */}
+          <Image
+            source={require("../../assets/images/spark-logo.png")}
+            style={styles.logo}
+          />
 
-        {/* CARD */}
-        <View style={styles.card}>
+          {/* CARD */}
+          <View style={styles.card}>
 
           {/* BACK BUTTON */}
           <TouchableOpacity
@@ -293,8 +301,9 @@ export default function RegisterScreen() {
               </Text>
             )}
           </TouchableOpacity>
-        </View>
-      </ScrollView>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ImageBackground>
   );
 }
