@@ -155,9 +155,6 @@ export default function Map() {
 
   return (
     <div className="flex flex-col h-full gap-4 relative">
-      <div className="absolute top-0 right-4 z-10">
-        <h2 className="text-3xl font-extrabold text-[#C82A2A]">Map</h2>
-      </div>
 
       <div className="flex-1 flex gap-6 min-h-0 z-0">
         {/* Kiri: Peta Leaflet */}
