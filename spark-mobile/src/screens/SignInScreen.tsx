@@ -8,7 +8,9 @@ import {
   TextInput,
   ImageBackground,
   ActivityIndicator,
-  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from "react-native";
 
 import {
@@ -57,17 +59,27 @@ export default function SignInScreen() {
       style={styles.container}
       resizeMode="cover"
     >
-      {/* OVERLAY */}
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={0}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* OVERLAY */}
+          <View style={styles.overlay}>
 
-        {/* LOGO */}
-        <Image
-          source={require("../../assets/images/spark-logo.png")}
-          style={styles.logo}
-        />
+            {/* LOGO */}
+            <Image
+              source={require("../../assets/images/spark-logo.png")}
+              style={styles.logo}
+            />
 
-        {/* CARD */}
-        <View style={styles.card}>
+            {/* CARD */}
+            <View style={styles.card}>
 
           {/* ICON */}
           <View style={styles.iconBox}>
@@ -183,8 +195,10 @@ export default function SignInScreen() {
               </Text>
             </Text>
           </TouchableOpacity>
-        </View>
-      </View>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ImageBackground>
   );
 }
@@ -195,13 +209,17 @@ const styles = StyleSheet.create({
   },
 
   overlay: {
-    flex: 1,
     backgroundColor:
       "rgba(248,243,233,0.55)",
 
-    justifyContent: "center",
+    justifyContent: "flex-start",
     alignItems: "center",
     paddingHorizontal: 28,
+    paddingTop: 95,
+    paddingBottom: 20,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
 
   logo: {
