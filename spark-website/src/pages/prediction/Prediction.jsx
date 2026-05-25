@@ -87,54 +87,17 @@ export default function Prediction() {
             return a.name.localeCompare(b.name);
           });
           
-          const items = [];
-          // Rekomendasi utama: lokasi yang dituju jika ada di database
-          const mainArea = selectedArea;
-          if (mainArea) {
-            items.push({
-              name: mainArea.name,
-              spots: mainArea.available_slots,
-              total: mainArea.total_slots,
-              walk: '0 min walk',
-              status: mainArea.status_label
-            });
-          } else {
-            items.push({
-              name: `${location} Main Parking`,
-              spots: 24,
-              total: 30,
-              walk: '1 min walk',
-              status: 'available'
-            });
-          }
+          const items = sorted.slice(0, 3).map((area) => ({
+            name: area.name,
+            spots: area.available_slots,
+            total: area.total_slots,
+            walk: `${Math.max(1, Math.round(distanceFromDestination(area) * 12))} min walk`,
+            status: area.status_label,
+          }));
 
-          // Rekomendasi alternatif dari list yang disortir
-          const alternative = sorted.find(a => normalizeName(a.name) !== normalizeName(location));
-          if (alternative) {
-            items.push({
-              name: alternative.name,
-              spots: alternative.available_slots,
-              total: alternative.total_slots,
-              walk: `${Math.max(1, Math.round(distanceFromDestination(alternative) * 12))} min walk`,
-              status: alternative.status_label
-            });
-          } else {
-            items.push({
-              name: campus === 'Ganesha' ? 'GKU Timur Parking' : 'GKU 2 Parking',
-              spots: 12,
-              total: 20,
-              walk: '3 min walk',
-              status: 'available'
-            });
-          }
-          
           setRecommendations(items);
         } catch (fallbackErr) {
-          // Fallback statis jika backend benar-benar offline
-          setRecommendations([
-            { name: `${location} Main Parking`, spots: 24, total: 30, walk: '1 min walk', status: 'available' },
-            { name: campus === 'Ganesha' ? 'GKU Timur Parking' : 'GKU 2 Parking', spots: 12, total: 20, walk: '3 min walk', status: 'available' },
-          ]);
+          setRecommendations([]);
         }
       } finally {
         setLoading(false);

@@ -40,6 +40,21 @@ function statusText(label: string): string {
   }
 }
 
+function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function normalizeName(value: string): string {
+  return String(value || "").trim().toLowerCase();
+}
+
 function getAreaAvailability(area: ParkingAreaWithStatus): { available: number; total: number } {
   const slotStatus = area.slot_status;
   if (!slotStatus || Object.keys(slotStatus).length === 0) {
@@ -124,28 +139,62 @@ export default function PredictionScreen() {
 
         try {
           const campusAreas = selectedCampus === "Ganesha"
-            ? areas.filter((a) => a.latitude > -6.92)
-            : areas.filter((a) => a.latitude <= -6.92);
+            ? areas.filter((a: ParkingAreaWithStatus) => a.latitude > -6.92)
+            : areas.filter((a: ParkingAreaWithStatus) => a.latitude <= -6.92);
 
-          const fallbackRecommendations = [...campusAreas]
+          const selectedArea = campusAreas.find(
+            (area: ParkingAreaWithStatus) =>
+              normalizeName(area.name) === normalizeName(selectedBuilding)
+          ) || null;
+
+          const distanceFromDestination = (area: ParkingAreaWithStatus) => {
+            if (!selectedArea) return Number.MAX_SAFE_INTEGER;
+            return haversineDistance(
+              area.latitude,
+              area.longitude,
+              selectedArea.latitude,
+              selectedArea.longitude
+            );
+          };
+
+          const availableFirst = campusAreas.filter(
+            (area: ParkingAreaWithStatus) => getAreaAvailability(area).available > 0
+          );
+          const fallbackPool = availableFirst.length > 0 ? availableFirst : campusAreas;
+
+          const fallbackRecommendations = [...fallbackPool]
             .sort((a, b) => {
+              const distanceDiff = distanceFromDestination(a) - distanceFromDestination(b);
+              if (distanceDiff !== 0) return distanceDiff;
+
               const aAvailability = getAreaAvailability(a).available;
               const bAvailability = getAreaAvailability(b).available;
-              if (bAvailability !== aAvailability) return bAvailability - aAvailability;
+              if (bAvailability !== aAvailability) {
+                return bAvailability - aAvailability;
+              }
+
               return a.name.localeCompare(b.name);
             })
             .slice(0, 5)
-            .map((area) => ({
-              area_id: area.id,
-              area_name: area.name,
-              available_slots: getAreaAvailability(area).available,
-              total_slots: area.total_slots,
-              occupancy_rate: area.occupancy_rate,
-              status_label: area.status_label,
-              distance_km: 0,
-              estimated_walk_minutes: 0,
-              score: 0,
-            }));
+            .map((area) => {
+              const counts = getAreaAvailability(area);
+              const distanceKm = distanceFromDestination(area);
+              const walkMinutes = distanceKm === Number.MAX_SAFE_INTEGER
+                ? 0
+                : (distanceKm / 5) * 60;
+
+              return {
+                area_id: area.id,
+                area_name: area.name,
+                available_slots: counts.available,
+                total_slots: counts.total,
+                occupancy_rate: area.occupancy_rate,
+                status_label: area.status_label,
+                distance_km: distanceKm === Number.MAX_SAFE_INTEGER ? 0 : Number(distanceKm.toFixed(4)),
+                estimated_walk_minutes: Number(walkMinutes.toFixed(1)),
+                score: Number((1 / (1 + (distanceKm === Number.MAX_SAFE_INTEGER ? 0 : distanceKm))).toFixed(4)),
+              };
+            });
 
           setRecommendations(fallbackRecommendations);
           setRecommendationError("Backend recommendation service is unavailable. Showing local fallback.");
