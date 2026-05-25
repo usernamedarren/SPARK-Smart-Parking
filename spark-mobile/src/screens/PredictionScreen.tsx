@@ -13,9 +13,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import {
   getParkingAreas,
-  getPrediction,
+  getRecommendations,
   ParkingAreaWithStatus,
-  PredictionResponse,
+  RecommendationItem,
 } from "../services/api";
 
 // ---------------------------------------------------------------------------
@@ -38,25 +38,6 @@ function statusText(label: string): string {
     case "full": return "Full";
     default: return "Available";
   }
-}
-
-function statusIcon(label: string): string {
-  switch (label) {
-    case "available": return "checkmark-circle";
-    case "limited": return "alert-circle";
-    case "full": return "close-circle";
-    default: return "checkmark-circle";
-  }
-}
-
-function predictionNote(pred: PredictionResponse): string {
-  if (pred.predicted_status_label === "available") {
-    return `Most likely available on arrival\nConfidence: ${Math.round(pred.confidence * 100)}%`;
-  }
-  if (pred.predicted_status_label === "limited") {
-    return `Likely available on arrival\nConfidence: ${Math.round(pred.confidence * 100)}%`;
-  }
-  return `Not available on arrival\nConfidence: ${Math.round(pred.confidence * 100)}%`;
 }
 
 function getAreaAvailability(area: ParkingAreaWithStatus): { available: number; total: number } {
@@ -82,6 +63,11 @@ function getAreaAvailability(area: ParkingAreaWithStatus): { available: number; 
   return { available, total: area.total_slots };
 }
 
+const campusData = {
+  Ganesha: ["LABTEK 5", "LABTEK 8", "FSRD", "GKUB", "GKUT", "CADL", "ALBAR", "ALTIM"],
+  Jatinangor: ["GKU 1", "GKU 2", "GKU 3", "REKTORAT"],
+};
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -92,12 +78,13 @@ export default function PredictionScreen() {
   const [areas, setAreas] = useState<ParkingAreaWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [selectedCampus, setSelectedCampus] = useState("");
+  const [selectedCampus, setSelectedCampus] = useState("Ganesha");
+  const [selectedBuilding, setSelectedBuilding] = useState("");
   const [showCampusOptions, setShowCampusOptions] = useState(false);
-
-  // Predictions keyed by area_id
-  const [predictions, setPredictions] = useState<Record<string, PredictionResponse>>({});
-  const [predictingIds, setPredictingIds] = useState<Set<string>>(new Set());
+  const [showBuildingOptions, setShowBuildingOptions] = useState(false);
+  const [recommendations, setRecommendations] = useState<RecommendationItem[]>([]);
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+  const [recommendationError, setRecommendationError] = useState("");
 
   // Fetch areas
   const fetchAreas = useCallback(async () => {
@@ -113,44 +100,69 @@ export default function PredictionScreen() {
 
   useEffect(() => {
     fetchAreas();
-    const intervalId = setInterval(fetchAreas, 3000);
+    const intervalId = setInterval(fetchAreas, 5000);
     return () => clearInterval(intervalId);
   }, [fetchAreas]);
 
-  // When campus is selected, auto-fetch predictions for all areas in that campus
+  // Fetch recommendations when the user chooses a building
   useEffect(() => {
-    if (!selectedCampus || areas.length === 0) return;
+    if (!selectedBuilding) {
+      setRecommendations([]);
+      setRecommendationError("");
+      return;
+    }
 
-    const campusAreas = selectedCampus === "GANESHA"
-      ? areas.filter((a) => a.latitude > -6.92)
-      : areas.filter((a) => a.latitude <= -6.92);
+    const fetchRecommendations = async () => {
+      setLoadingRecommendations(true);
+      setRecommendationError("");
 
-    // Predict 30 minutes from now
-    const arrivalTime = new Date(Date.now() + 30 * 60 * 1000).toISOString();
-
-    campusAreas.forEach(async (area) => {
-      if (predictions[area.id]) return; // already fetched
-
-      setPredictingIds((prev) => new Set(prev).add(area.id));
       try {
-        const pred = await getPrediction(area.id, arrivalTime);
-        setPredictions((prev) => ({ ...prev, [area.id]: pred }));
+        const res = await getRecommendations(selectedBuilding, 5);
+        setRecommendations(res.recommendations || []);
       } catch (e) {
-        console.error(`Prediction failed for ${area.name}:`, e);
-      } finally {
-        setPredictingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(area.id);
-          return next;
-        });
-      }
-    });
-  }, [selectedCampus, areas]);
+        console.error("PredictionScreen recommendation error:", e);
 
-  // Filter areas by campus
-  const ganeshaAreas = areas.filter((a) => a.latitude > -6.92);
-  const jatinangorAreas = areas.filter((a) => a.latitude <= -6.92);
-  const displayAreas = selectedCampus === "GANESHA" ? ganeshaAreas : jatinangorAreas;
+        try {
+          const campusAreas = selectedCampus === "Ganesha"
+            ? areas.filter((a) => a.latitude > -6.92)
+            : areas.filter((a) => a.latitude <= -6.92);
+
+          const fallbackRecommendations = [...campusAreas]
+            .sort((a, b) => {
+              const aAvailability = getAreaAvailability(a).available;
+              const bAvailability = getAreaAvailability(b).available;
+              if (bAvailability !== aAvailability) return bAvailability - aAvailability;
+              return a.name.localeCompare(b.name);
+            })
+            .slice(0, 5)
+            .map((area) => ({
+              area_id: area.id,
+              area_name: area.name,
+              available_slots: getAreaAvailability(area).available,
+              total_slots: area.total_slots,
+              occupancy_rate: area.occupancy_rate,
+              status_label: area.status_label,
+              distance_km: 0,
+              estimated_walk_minutes: 0,
+              score: 0,
+            }));
+
+          setRecommendations(fallbackRecommendations);
+          setRecommendationError("Backend recommendation service is unavailable. Showing local fallback.");
+        } catch (fallbackError) {
+          console.error("PredictionScreen fallback error:", fallbackError);
+          setRecommendations([]);
+          setRecommendationError("Unable to load parking recommendations.");
+        }
+      } finally {
+        setLoadingRecommendations(false);
+      }
+    };
+
+    fetchRecommendations();
+  }, [selectedBuilding, selectedCampus, areas]);
+
+  const buildingOptions = campusData[selectedCampus as keyof typeof campusData] || [];
 
   if (loading) {
     return (
@@ -192,27 +204,25 @@ export default function PredictionScreen() {
 
       {/* TITLE */}
       <Text style={styles.title}>
-        Prediction
+        Recommendation
       </Text>
 
       {/* PREDICT BOX */}
       <View style={styles.predictBox}>
-        <Text style={styles.predictTitle}>
-          Predict Parking Availability
-        </Text>
+        <Text style={styles.predictTitle}>Find Nearby Parking</Text>
 
-        {/* WHERE */}
+        {/* CAMPUS */}
         <TouchableOpacity
           style={styles.whereBox}
           onPress={() => setShowCampusOptions(!showCampusOptions)}
         >
           <View style={styles.row}>
-            <Ionicons name="location" size={22} color="#D92E3F" />
+            <Ionicons name="school" size={22} color="#D92E3F" />
 
             <View style={{ marginLeft: 14 }}>
-              <Text style={styles.whereTitle}>Where?</Text>
+              <Text style={styles.whereTitle}>Select Campus</Text>
               <Text style={styles.whereSubtitle}>
-                {selectedCampus || "Select destination....."}
+                ITB {selectedCampus}
               </Text>
             </View>
           </View>
@@ -226,7 +236,8 @@ export default function PredictionScreen() {
             <TouchableOpacity
               style={styles.optionButton}
               onPress={() => {
-                setSelectedCampus("GANESHA");
+                setSelectedCampus("Ganesha");
+                setSelectedBuilding("");
                 setShowCampusOptions(false);
               }}
             >
@@ -236,7 +247,8 @@ export default function PredictionScreen() {
             <TouchableOpacity
               style={styles.optionButton}
               onPress={() => {
-                setSelectedCampus("JATINANGOR");
+                setSelectedCampus("Jatinangor");
+                setSelectedBuilding("");
                 setShowCampusOptions(false);
               }}
             >
@@ -244,146 +256,133 @@ export default function PredictionScreen() {
             </TouchableOpacity>
           </View>
         )}
+
+        {/* BUILDING */}
+        <TouchableOpacity
+          style={[styles.whereBox, { marginTop: 12 }]}
+          onPress={() => setShowBuildingOptions(!showBuildingOptions)}
+        >
+          <View style={styles.row}>
+            <Ionicons name="location" size={22} color="#D92E3F" />
+
+            <View style={{ marginLeft: 14 }}>
+              <Text style={styles.whereTitle}>Select Building</Text>
+              <Text style={styles.whereSubtitle}>
+                {selectedBuilding || "Choose a destination building"}
+              </Text>
+            </View>
+          </View>
+
+          <Ionicons name="chevron-down" size={24} color="#D92E3F" />
+        </TouchableOpacity>
+
+        {showBuildingOptions && (
+          <View style={styles.optionContainer}>
+            {buildingOptions.map((building) => (
+              <TouchableOpacity
+                key={building}
+                style={styles.optionButton}
+                onPress={() => {
+                  setSelectedBuilding(building);
+                  setShowBuildingOptions(false);
+                }}
+              >
+                <Text style={styles.optionText}>{building}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
 
       {/* RECOMMEND */}
-      {selectedCampus !== "" && (
+      {selectedBuilding !== "" && (
         <>
-          <Text style={styles.recommendTitle}>
-            Recommend Parking
-          </Text>
+          <Text style={styles.recommendTitle}>Recommend Parking</Text>
 
           <Text style={styles.recommendSubtitle}>
-            Prediction based on real-time and historical data estimation
+            Nearest available parking spots based on your building choice
           </Text>
 
-          {displayAreas.map((area) => {
-            const pred = predictions[area.id];
-            const isPredicting = predictingIds.has(area.id);
+          {loadingRecommendations ? (
+            <View style={{ paddingVertical: 16 }}>
+              <ActivityIndicator size="small" color="#D92E3F" />
+            </View>
+          ) : recommendations.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>
+                No recommendation found for this selection.
+              </Text>
+            </View>
+          ) : (
+            recommendations.map((rec) => {
+              const color = statusColor(rec.status_label);
+              const status = statusText(rec.status_label);
 
-            // Use prediction data if available, otherwise use current status
-            const color = pred
-              ? statusColor(pred.predicted_status_label)
-              : statusColor(area.status_label);
-            const status = pred
-              ? statusText(pred.predicted_status_label)
-              : statusText(area.status_label);
-            const spots = pred
-              ? pred.predicted_available_slots
-              : getAreaAvailability(area).available;
-            const icon = pred
-              ? statusIcon(pred.predicted_status_label)
-              : statusIcon(area.status_label);
-            const note = pred
-              ? predictionNote(pred)
-              : "Loading prediction...";
+              return (
+                <View key={rec.area_id} style={styles.card}>
+                  <View style={styles.cardTop}>
+                    <View style={[styles.parkingIcon, { backgroundColor: color }]}>
+                      <Text style={styles.pText}>P</Text>
+                    </View>
 
-            return (
-              <ParkingCard
-                key={area.id}
-                color={color}
-                status={status}
-                spots={String(spots)}
-                title={area.name}
-                icon={icon}
-                note={note}
-                isPredicting={isPredicting}
-                onNavigate={() =>
-                  navigation.navigate("DetailParking", {
-                    selectedLocation: area.name,
-                    areaId: area.id,
-                  })
-                }
-              />
-            );
-          })}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.cardTitle}>{rec.area_name}</Text>
+
+                      <View style={styles.infoRow}>
+                        <Ionicons name="walk" size={18} color={color} />
+                        <Text style={styles.walkText}>
+                          {Math.max(1, Math.round(rec.estimated_walk_minutes || 1))} min walk
+                        </Text>
+                      </View>
+
+                      <View style={styles.infoRow}>
+                        <Ionicons name="location" size={18} color={color} />
+                        <Text style={styles.noteText}>
+                          {rec.distance_km > 0 ? `${rec.distance_km.toFixed(2)} km from destination` : "Distance estimated by backend"}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.line} />
+
+                  <View style={styles.cardBottom}>
+                    <View style={styles.row}>
+                      <View style={[styles.statusBadge, { backgroundColor: color + "20" }]}>
+                        <Text style={{ color, fontFamily: "PoppinsMedium" }}>
+                          {status}
+                        </Text>
+                      </View>
+
+                      <Text style={styles.spotText}>{rec.available_slots} spots</Text>
+                    </View>
+
+                    <TouchableOpacity
+                      style={[styles.navigateBtn, { borderColor: color }]}
+                      onPress={() =>
+                        navigation.navigate("DetailParking", {
+                          selectedLocation: rec.area_name,
+                          areaId: rec.area_id,
+                        })
+                      }
+                    >
+                      <Ionicons name="location" size={18} color={color} />
+                      <Text style={{ color, marginLeft: 4, fontFamily: "PoppinsMedium" }}>
+                        Navigate
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })
+          )}
+
+          {!!recommendationError && (
+            <Text style={styles.errorText}>{recommendationError}</Text>
+          )}
         </>
       )}
     </ScrollView>
-  );
-}
-
-/* CARD COMPONENT */
-function ParkingCard({
-  color,
-  status,
-  spots,
-  title,
-  icon,
-  note,
-  isPredicting,
-  onNavigate,
-}: any) {
-  return (
-    <View style={styles.card}>
-      <View style={styles.cardTop}>
-        <View
-          style={[styles.parkingIcon, { backgroundColor: color }]}
-        >
-          <Text style={styles.pText}>P</Text>
-        </View>
-
-        <View style={{ flex: 1 }}>
-          <Text style={styles.cardTitle}>{title}</Text>
-
-          <View style={styles.infoRow}>
-            <Ionicons name="walk" size={18} color={color} />
-            <Text style={styles.walkText}>
-              Estimated arrival: 30 min
-            </Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            {isPredicting ? (
-              <ActivityIndicator size="small" color={color} />
-            ) : (
-              <Ionicons name={icon} size={18} color={color} />
-            )}
-            <Text style={styles.noteText}>{note}</Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.line} />
-
-      <View style={styles.cardBottom}>
-        <View style={styles.row}>
-          <View
-            style={[
-              styles.statusBadge,
-              { backgroundColor: color + "20" },
-            ]}
-          >
-            <Text
-              style={{
-                color,
-                fontFamily: "PoppinsMedium",
-              }}
-            >
-              {status}
-            </Text>
-          </View>
-
-          <Text style={styles.spotText}>{spots} spots</Text>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.navigateBtn, { borderColor: color }]}
-          onPress={onNavigate}
-        >
-          <Ionicons name="location" size={18} color={color} />
-          <Text
-            style={{
-              color,
-              marginLeft: 4,
-              fontFamily: "PoppinsMedium",
-            }}
-          >
-            Navigate
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
   );
 }
 
@@ -592,5 +591,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  emptyState: {
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+
+  emptyStateText: {
+    fontFamily: "PoppinsRegular",
+    color: "#666",
+    fontSize: 12,
+    textAlign: "center",
+  },
+
+  errorText: {
+    marginTop: 10,
+    fontFamily: "PoppinsMedium",
+    color: "#B91C1C",
+    fontSize: 11,
+    textAlign: "center",
   },
 });

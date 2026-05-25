@@ -3,6 +3,21 @@ import { useNavigate } from 'react-router-dom';
 import CampusMap from '../../components/CampusMap'; // Menggunakan komponen peta interaktif asli
 import api from '../../services/api';
 
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function normalizeName(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
 export default function Prediction() {
   const navigate = useNavigate();
   const [campus, setCampus] = useState('Ganesha');
@@ -16,7 +31,7 @@ export default function Prediction() {
     Jatinangor: ['GKU 1', 'GKU 2', 'GKU 3', 'REKTORAT']
   };
 
-  // Panggil endpoint rekomendasi ketika lokasi berubah
+  // Panggil endpoint rekomendasi ketika gedung tujuan berubah
   useEffect(() => {
     if (!location) {
       setRecommendations([]);
@@ -52,18 +67,35 @@ export default function Prediction() {
             return campus === 'Jatinangor' ? isJatinangor : !isJatinangor;
           });
           
-          // Sort berdasarkan occupancy rate terendah (ketersediaan terbaik)
-          const sorted = [...campusAreas].sort((a, b) => a.occupancy_rate - b.occupancy_rate);
+          const selectedArea = campusAreas.find(
+            (area) => normalizeName(area.name) === normalizeName(location)
+          ) || campusAreas[0] || null;
+
+          const targetLat = selectedArea ? selectedArea.latitude : null;
+          const targetLon = selectedArea ? selectedArea.longitude : null;
+
+          const distanceFromDestination = (area) => {
+            if (targetLat === null || targetLon === null) return Number.MAX_SAFE_INTEGER;
+            return haversineDistance(area.latitude, area.longitude, targetLat, targetLon);
+          };
+
+          const availableFirst = [...campusAreas].filter(area => area.available_slots > 0);
+          const fallbackPool = availableFirst.length > 0 ? availableFirst : campusAreas;
+          const sorted = [...fallbackPool].sort((a, b) => {
+            const distanceDiff = distanceFromDestination(a) - distanceFromDestination(b);
+            if (distanceDiff !== 0) return distanceDiff;
+            return a.name.localeCompare(b.name);
+          });
           
           const items = [];
           // Rekomendasi utama: lokasi yang dituju jika ada di database
-          const mainArea = campusAreas.find(a => a.name.toUpperCase() === location.toUpperCase());
+          const mainArea = selectedArea;
           if (mainArea) {
             items.push({
               name: mainArea.name,
               spots: mainArea.available_slots,
               total: mainArea.total_slots,
-              walk: '1 min walk',
+              walk: '0 min walk',
               status: mainArea.status_label
             });
           } else {
@@ -77,13 +109,13 @@ export default function Prediction() {
           }
 
           // Rekomendasi alternatif dari list yang disortir
-          const alternative = sorted.find(a => a.name.toUpperCase() !== location.toUpperCase());
+          const alternative = sorted.find(a => normalizeName(a.name) !== normalizeName(location));
           if (alternative) {
             items.push({
               name: alternative.name,
               spots: alternative.available_slots,
               total: alternative.total_slots,
-              walk: '3 min walk',
+              walk: `${Math.max(1, Math.round(distanceFromDestination(alternative) * 12))} min walk`,
               status: alternative.status_label
             });
           } else {
@@ -117,7 +149,7 @@ export default function Prediction() {
       <div className="flex-1 flex gap-6 min-h-0">
         
         {/* Poin 2: Menyamakan bagian map agar interaktif dengan pilihan ITB Ganesha dan Jatinangor */}
-        <div className="flex-[3] bg-white border border-red-200 rounded-3xl relative overflow-hidden shadow-xs z-0">
+        <div className="flex-3 bg-white border border-red-200 rounded-3xl relative overflow-hidden shadow-xs z-0">
           <div className="absolute inset-0 w-full h-full opacity-80">
             <CampusMap campus={campus} />
           </div>
@@ -127,10 +159,10 @@ export default function Prediction() {
         </div>
 
         {/* Right Input & Recommendation Panel */}
-        <div className="flex-[2] flex flex-col gap-5">
+        <div className="flex-2 flex flex-col gap-5">
           {/* Predict Selector Form */}
           <div className="bg-white border border-red-100 rounded-3xl p-6 shadow-sm">
-            <h3 className="font-extrabold text-[#C82A2A] text-lg mb-5">Predict Parking Availability</h3>
+            <h3 className="font-extrabold text-[#C82A2A] text-lg mb-5">Find Nearby Parking</h3>
             
             {/* Poin 3: Memilih ITB Ganesha atau Jatinangor terlebih dahulu */}
             <div className="border border-red-200 rounded-2xl p-3 mb-4">
@@ -147,13 +179,13 @@ export default function Prediction() {
 
             {/* Poin 3: Memilih wilayah yang ingin dituju */}
             <div className="border border-red-200 rounded-2xl p-3">
-              <label className="text-[11px] text-[#C82A2A] font-bold block mb-1.5 uppercase tracking-wide">📍 Where?</label>
+              <label className="text-[11px] text-[#C82A2A] font-bold block mb-1.5 uppercase tracking-wide">🏢 Select Building</label>
               <select 
                 value={location} 
                 onChange={(e) => setLocation(e.target.value)}
                 className="w-full text-sm outline-none text-gray-700 font-semibold bg-transparent cursor-pointer"
               >
-                <option value="" disabled>Select destination area...</option>
+                <option value="" disabled>Select a building to get nearest parking...</option>
                 {campusData[campus].map((loc) => (
                   <option key={loc} value={loc}>{loc}</option>
                 ))}
@@ -166,7 +198,7 @@ export default function Prediction() {
           <div className="flex-1 flex flex-col min-h-0">
             <h3 className="font-extrabold text-[#C82A2A] text-lg mb-1">Recommend Parking</h3>
             <p className="text-[10px] font-bold text-gray-400 mb-4">
-              {location ? 'Optimal parking spots based on your destination' : 'Please select a destination area above to generate recommendations'}
+              {location ? 'Nearest available parking spots based on your building choice' : 'Please select a building above to generate recommendations'}
             </p>
             
             {location && (

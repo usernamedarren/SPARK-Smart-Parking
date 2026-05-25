@@ -21,11 +21,10 @@ async def get_recommendation(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Get parking area recommendations sorted by proximity to destination and availability.
-    
-    The algorithm scores each area based on:
-    - Distance from the parking area to the destination building (40% weight)
-    - Current slot availability (60% weight)
+    Get parking area recommendations for a selected building.
+
+    The algorithm prioritizes parking areas with available slots, then sorts
+    them by the shortest distance to the chosen building.
     """
     try:
         result = await recommendation_service.get_recommendations(destination, top_n)
