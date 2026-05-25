@@ -22,7 +22,6 @@ import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import {
   getParkingAreas,
-  getRecommendations,
   ParkingAreaWithStatus,
   RecommendationItem,
 } from "../services/api";
@@ -56,6 +55,29 @@ function statusText(label: string): string {
   }
 }
 
+function getAreaAvailability(area: ParkingAreaWithStatus): { available: number; total: number } {
+  const slotStatus = area.slot_status;
+  if (!slotStatus || Object.keys(slotStatus).length === 0) {
+    return { available: area.available_slots, total: area.total_slots };
+  }
+
+  let available = 0;
+  for (const raw of Object.values(slotStatus)) {
+    if (typeof raw === "boolean") {
+      if (!raw) available += 1;
+      continue;
+    }
+    if (typeof raw === "string") {
+      const value = raw.toLowerCase();
+      if (value === "empty" || value === "available") {
+        available += 1;
+      }
+    }
+  }
+
+  return { available, total: area.total_slots };
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -73,12 +95,28 @@ export default function HomeScreen() {
   // Fetch data
   const fetchData = useCallback(async () => {
     try {
-      const [areasData, recsData] = await Promise.all([
-        getParkingAreas(),
-        getRecommendations("GKU Barat", 3).catch(() => ({ destination: "", recommendations: [] })),
-      ]);
+      const areasData = await getParkingAreas();
       setAreas(areasData);
-      setRecommendations(recsData.recommendations);
+
+      const targetNames = ["labtek 5", "labtek 8", "gku 2"];
+      const filtered = areasData.filter((area) =>
+        targetNames.includes(area.name.trim().toLowerCase())
+      );
+      const mapped = filtered.map((area) => {
+        const counts = getAreaAvailability(area);
+        return {
+          area_id: area.id,
+          area_name: area.name,
+          available_slots: counts.available,
+          total_slots: counts.total,
+          occupancy_rate: area.occupancy_rate,
+          status_label: area.status_label,
+          distance_km: 0,
+          estimated_walk_minutes: 0,
+          score: 0,
+        };
+      });
+      setRecommendations(mapped);
     } catch (e) {
       console.error("HomeScreen fetch error:", e);
     } finally {
@@ -87,17 +125,33 @@ export default function HomeScreen() {
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+    const intervalId = setInterval(fetchData, 2000);
+    return () => clearInterval(intervalId);
+  }, [fetchData]);
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchData();
   };
 
-  // Calculate campus-wide availability
-  const totalSlots = areas.reduce((s, a) => s + a.total_slots, 0);
-  const totalAvailable = areas.reduce((s, a) => s + a.available_slots, 0);
-  const campusPercent = totalSlots > 0 ? Math.round((totalAvailable / totalSlots) * 100) : 0;
+  // Calculate campus-wide availability (all parking lots)
+  const availabilityTotals = areas.reduce(
+    (acc, area) => {
+      const counts = getAreaAvailability(area);
+      return {
+        totalSlots: acc.totalSlots + counts.total,
+        totalAvailable: acc.totalAvailable + counts.available,
+      };
+    },
+    { totalSlots: 0, totalAvailable: 0 }
+  );
+  const totalSlots = availabilityTotals.totalSlots;
+  const totalAvailable = availabilityTotals.totalAvailable;
+  const campusPercent = totalSlots > 0
+    ? Math.round((totalAvailable / totalSlots) * 100)
+    : 0;
 
   // Search filter
   const filteredLocations = areas.filter((a) =>

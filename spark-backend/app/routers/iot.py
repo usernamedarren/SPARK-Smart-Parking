@@ -9,9 +9,9 @@ import traceback
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from app.models.schemas import DetectionResult
-from app.services.detection_service import detection_service
 from app.services.parking_service import parking_service
-from app.utils.image_processing import decode_image, resize_for_inference
+from app.ai.predict import predict_parking
+from app.models.enums import StatusLabel
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -30,7 +30,7 @@ async def upload_image(
     Flow:
     1. Validate image and camera_device_id
     2. Lookup parking area by camera_device_id
-    3. Run YOLOv8 inference
+    3. Run YOLOv8 inference using predict.py (slot-based segmentation)
     4. Calculate occupancy
     5. Update parking_status (upsert)
     6. Add parking_history record
@@ -74,59 +74,25 @@ async def upload_image(
     total_slots = area.get("total_slots", 0)
 
     try:
-        if camera_device_id == "CAM-TEST":
-            # Run custom YOLOv8-segmentation based slot prediction
-            from app.ai.predict import predict_parking
-            from app.models.enums import StatusLabel
-            from PIL import Image
-            import io
+        # Run slot-based prediction
+        prediction = predict_parking(file_bytes)
+        summary = prediction["summary"]
 
-            # Validate that the bytes form a readable image before running the model
-            try:
-                probe = Image.open(io.BytesIO(file_bytes))
-                probe.verify()  # Raises if corrupted/truncated
-            except Exception as img_err:
-                logger.warning(
-                    f"CAM-TEST received an unreadable image ({len(file_bytes)} bytes): {img_err}. "
-                    "Attempting to process anyway..."
-                )
-                # Don't raise — PIL.Image.open + convert('RGB') in predict_parking
-                # often recovers partial JPEG frames. Only hard-fail if truly empty.
-                if len(file_bytes) < 100:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Image is too small or corrupt ({len(file_bytes)} bytes).",
-                    )
+        # Extract occupied slots and calculate remaining available slots
+        occupied = summary["occupied"]
+        available = max(0, total_slots - occupied)
+        rate = round(occupied / total_slots, 4) if total_slots > 0 else 0.0
 
-            ai_result = predict_parking(file_bytes)
-
-            # Override database configuration if necessary to match actual camera view capacity (12 slots)
-            total_slots = ai_result["summary"]["total"]
-            occupied = ai_result["summary"]["occupied"]
-            available = ai_result["summary"]["empty"]
-            rate = round(occupied / total_slots, 4) if total_slots > 0 else 0.0
-            avg_confidence = ai_result["summary"]["confidence_avg"]
-            vehicles_detected = ai_result["summary"]["vehicles_detected"]
-
-            # Determine status label
-            if rate < 0.6:
-                label = StatusLabel.AVAILABLE.value
-            elif rate < 0.85:
-                label = StatusLabel.LIMITED.value
-            else:
-                label = StatusLabel.FULL.value
-
-            logger.info(f"CAM-TEST Slot Occupancy Status: {ai_result['slot_status']}")
+        # Determine status label based on occupancy rate
+        if rate < 0.6:
+            label = StatusLabel.AVAILABLE.value
+        elif rate < 0.85:
+            label = StatusLabel.LIMITED.value
         else:
-            # Decode and resize image (standard counting mode)
-            img = decode_image(file_bytes)
-            img = resize_for_inference(img)
+            label = StatusLabel.FULL.value
 
-            # Run standard YOLOv8 detection
-            detections = detection_service.detect_vehicles(img)
-            occupied, available, rate, label = detection_service.count_occupied_slots(detections, total_slots)
-            avg_confidence = detection_service.get_average_confidence(detections)
-            vehicles_detected = len(detections)
+        vehicles_detected = summary["vehicles_detected"]
+        avg_confidence = summary["confidence_avg"]
 
         # Update current status
         await parking_service.update_status(
@@ -135,6 +101,7 @@ async def upload_image(
             available_slots=available,
             occupancy_rate=rate,
             status_label=label,
+            slot_status=prediction.get("slot_status"),
         )
 
         # Add history record

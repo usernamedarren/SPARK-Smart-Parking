@@ -122,18 +122,18 @@ def predict_parking(image_bytes: bytes) -> dict:
             if overlap > OVERLAP_THRESHOLD:
                 slot_status[slot_id] = "occupied"
 
-    occupied = sum(1 for status in slot_status.values() if status == "occupied")
+    occupied = sum(1 for s in slot_status.values() if s == "occupied")
 
-    # Calculate average confidence of valid detections
-    avg_confidence = float(np.mean([confs[i] for i in valid_indices])) if valid_indices else 0.0
+    valid_confs = [confs[i] for i in valid_indices] if valid_indices else []
+    confidence_avg = float(sum(valid_confs) / len(valid_confs)) if valid_confs else 0.0
 
     return {
         "slot_status": slot_status,
         "summary": {
-            "total":             len(SLOT_COORDINATES),
-            "occupied":          occupied,
-            "empty":             len(SLOT_COORDINATES) - occupied,
-            "confidence_avg":    round(avg_confidence, 4),
-            "vehicles_detected": len(valid_indices)
+            "total":    len(SLOT_COORDINATES),
+            "occupied": occupied,
+            "empty":    len(SLOT_COORDINATES) - occupied,
+            "vehicles_detected": len(valid_indices),
+            "confidence_avg": round(confidence_avg, 4),
         }
     }

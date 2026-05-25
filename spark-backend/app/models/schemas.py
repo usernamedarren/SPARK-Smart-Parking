@@ -102,6 +102,7 @@ class ParkingStatus(BaseModel):
     status_label: StatusLabel
     captured_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    slot_status: Optional[dict] = None
 
 
 class ParkingAreaWithStatus(BaseModel):
@@ -120,6 +121,7 @@ class ParkingAreaWithStatus(BaseModel):
     captured_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     image_url: Optional[str] = None
+    slot_status: Optional[dict] = None
 
 
 # ============================================================
