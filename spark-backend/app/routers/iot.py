@@ -8,9 +8,9 @@ import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from app.models.schemas import DetectionResult
-from app.services.detection_service import detection_service
 from app.services.parking_service import parking_service
-from app.utils.image_processing import decode_image, resize_for_inference
+from app.ai.predict import predict_parking
+from app.models.enums import StatusLabel
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -29,7 +29,7 @@ async def upload_image(
     Flow:
     1. Validate image and camera_device_id
     2. Lookup parking area by camera_device_id
-    3. Run YOLOv8 inference
+    3. Run YOLOv8 inference using predict.py (slot-based segmentation)
     4. Calculate occupancy
     5. Update parking_status (upsert)
     6. Add parking_history record
@@ -57,14 +57,25 @@ async def upload_image(
     total_slots = area.get("total_slots", 0)
 
     try:
-        # Decode and resize image
-        img = decode_image(file_bytes)
-        img = resize_for_inference(img)
+        # Run slot-based prediction
+        prediction = predict_parking(file_bytes)
+        summary = prediction["summary"]
 
-        # Run YOLOv8 detection
-        detections = detection_service.detect_vehicles(img)
-        occupied, available, rate, label = detection_service.count_occupied_slots(detections, total_slots)
-        avg_confidence = detection_service.get_average_confidence(detections)
+        # Extract occupied slots and calculate remaining available slots
+        occupied = summary["occupied"]
+        available = max(0, total_slots - occupied)
+        rate = round(occupied / total_slots, 4) if total_slots > 0 else 0.0
+
+        # Determine status label based on occupancy rate
+        if rate < 0.6:
+            label = StatusLabel.AVAILABLE.value
+        elif rate < 0.85:
+            label = StatusLabel.LIMITED.value
+        else:
+            label = StatusLabel.FULL.value
+
+        vehicles_detected = summary["vehicles_detected"]
+        avg_confidence = summary["confidence_avg"]
 
         # Update current status
         await parking_service.update_status(
@@ -102,7 +113,7 @@ async def upload_image(
             available_slots=available,
             occupancy_rate=rate,
             status_label=label,
-            vehicles_detected=len(detections),
+            vehicles_detected=vehicles_detected,
             confidence_avg=avg_confidence,
             captured_at=now,
             image_url=image_url,

@@ -99,11 +99,16 @@ def predict_parking(image_bytes: bytes) -> dict:
 
     occupied = sum(1 for s in slot_status.values() if s == "occupied")
 
+    valid_confs = [confs[i] for i in valid_indices] if valid_indices else []
+    confidence_avg = float(sum(valid_confs) / len(valid_confs)) if valid_confs else 0.0
+
     return {
         "slot_status": slot_status,
         "summary": {
             "total":    len(SLOT_COORDINATES),
             "occupied": occupied,
             "empty":    len(SLOT_COORDINATES) - occupied,
+            "vehicles_detected": len(valid_indices),
+            "confidence_avg": round(confidence_avg, 4),
         }
     }
