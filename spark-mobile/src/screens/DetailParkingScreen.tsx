@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+
 import {
   View,
   Text,
@@ -75,6 +76,26 @@ export default function DetailParkingScreen() {
     if (found) setCurrentArea(found);
   }, [selectedLocation, areas]);
 
+  // Refresh selected area status from API
+  useEffect(() => {
+    const refreshStatus = async () => {
+      if (!currentArea?.id) return;
+      try {
+        const latest = await getParkingAreaStatus(currentArea.id);
+        console.log("OK:", latest);
+        setCurrentArea(latest);
+        setAreas((prev) => prev.map((a) => (a.id === latest.id ? latest : a)));
+      } catch (e) {
+        console.error("DetailParkingScreen status refresh error:", e);
+      }
+    };
+
+    refreshStatus();
+    const intervalId = setInterval(refreshStatus, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [currentArea?.id]);
+
   // Determine campus
   const isJatinangor = currentArea ? currentArea.latitude <= -6.92 : false;
   const campusAreas = areas.filter((a) =>
@@ -92,17 +113,34 @@ export default function DetailParkingScreen() {
     const slotLabels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     const total = currentArea.total_slots;
     const occupied = currentArea.occupied_slots;
+    const slotStatusMap = currentArea.slot_status;
+
+    const resolveOccupied = (slotId: string, slotIndex: number, fallback: boolean) => {
+      if (!slotStatusMap) return fallback;
+      const statusKey = `slot_${slotIndex + 1}`;
+      const raw = (slotStatusMap as Record<string, unknown>)[statusKey]
+        ?? (slotStatusMap as Record<string, unknown>)[slotId];
+      if (typeof raw === "boolean") return raw;
+      if (typeof raw === "string") {
+        const value = raw.toLowerCase();
+        if (value === "empty" || value === "available") return false;
+        return value === "occupied" || value === "full";
+      }
+      return fallback;
+    };
 
     for (let i = 0; i < Math.min(total, 26); i++) {
       slots.push({
         id: slotLabels[i],
-        car: i < occupied,
+        car: resolveOccupied(slotLabels[i], i, i < occupied),
       });
     }
     return slots;
   };
 
   const parkingSlots = generateSlots();
+  const leftSlots = parkingSlots.slice(0, 6);
+  const rightSlots = parkingSlots.slice(6, 12);
 
   // Generate prediction for a slot
   const generatePrediction = async (slotId: string, hasCar: boolean) => {
@@ -269,31 +307,60 @@ export default function DetailParkingScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.grid}>
-            {parkingSlots.map((slot) => (
-              <View key={slot.id} style={styles.slotWrapper}>
-                {slot.car ? (
-                  <TouchableOpacity
-                    onPress={() => generatePrediction(slot.id, true)}
-                  >
-                    <Image
-                      source={require("../../assets/images/car-top.png")}
-                      style={styles.carImage}
-                    />
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    style={[
-                      styles.slotCard,
-                      selectedSlot === slot.id && styles.selectedSlot,
-                    ]}
-                    onPress={() => generatePrediction(slot.id, false)}
-                  >
-                    <Text style={styles.slotLetter}>{slot.id}</Text>
-                    <Text style={styles.slotStatus}>Available</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))}
+            <View style={styles.gridColumn}>
+              {leftSlots.map((slot) => (
+                <View key={slot.id} style={styles.slotWrapper}>
+                  {slot.car ? (
+                    <TouchableOpacity
+                      onPress={() => generatePrediction(slot.id, true)}
+                    >
+                      <Image
+                        source={require("../../assets/images/car-top.png")}
+                        style={styles.carImage}
+                      />
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={[
+                        styles.slotCard,
+                        selectedSlot === slot.id && styles.selectedSlot,
+                      ]}
+                      onPress={() => generatePrediction(slot.id, false)}
+                    >
+                      <Text style={styles.slotLetter}>{slot.id}</Text>
+                      <Text style={styles.slotStatus}>Available</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ))}
+            </View>
+            <View style={styles.gridColumn}>
+              {rightSlots.map((slot) => (
+                <View key={slot.id} style={styles.slotWrapper}>
+                  {slot.car ? (
+                    <TouchableOpacity
+                      onPress={() => generatePrediction(slot.id, true)}
+                    >
+                      <Image
+                        source={require("../../assets/images/car-top.png")}
+                        style={styles.carImage}
+                      />
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={[
+                        styles.slotCard,
+                        selectedSlot === slot.id && styles.selectedSlot,
+                      ]}
+                      onPress={() => generatePrediction(slot.id, false)}
+                    >
+                      <Text style={styles.slotLetter}>{slot.id}</Text>
+                      <Text style={styles.slotStatus}>Available</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ))}
+            </View>
           </View>
         </ScrollView>
       </View>
@@ -407,12 +474,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 30,
 
     flexDirection: "row",
-    flexWrap: "wrap",
     justifyContent: "space-between",
   },
 
-  slotWrapper: {
+  gridColumn: {
     width: "46%",
+  },
+
+  slotWrapper: {
+    width: "100%",
     marginBottom: 12,
   },
 
@@ -441,7 +511,7 @@ const styles = StyleSheet.create({
 
   carImage: {
     width: "100%",
-    height: 58,
+    height: 72,
     resizeMode: "contain",
   },
 

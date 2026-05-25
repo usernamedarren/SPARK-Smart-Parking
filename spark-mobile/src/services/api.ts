@@ -165,6 +165,7 @@ export interface ParkingAreaWithStatus {
   captured_at?: string;
   updated_at?: string;
   image_url?: string;
+  slot_status?: Record<string, unknown>;
 }
 
 export interface RecommendationItem {

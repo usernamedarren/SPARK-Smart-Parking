@@ -59,6 +59,29 @@ function predictionNote(pred: PredictionResponse): string {
   return `Not available on arrival\nConfidence: ${Math.round(pred.confidence * 100)}%`;
 }
 
+function getAreaAvailability(area: ParkingAreaWithStatus): { available: number; total: number } {
+  const slotStatus = area.slot_status;
+  if (!slotStatus || Object.keys(slotStatus).length === 0) {
+    return { available: area.available_slots, total: area.total_slots };
+  }
+
+  let available = 0;
+  for (const raw of Object.values(slotStatus)) {
+    if (typeof raw === "boolean") {
+      if (!raw) available += 1;
+      continue;
+    }
+    if (typeof raw === "string") {
+      const value = raw.toLowerCase();
+      if (value === "empty" || value === "available") {
+        available += 1;
+      }
+    }
+  }
+
+  return { available, total: area.total_slots };
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -88,7 +111,11 @@ export default function PredictionScreen() {
     }
   }, []);
 
-  useEffect(() => { fetchAreas(); }, [fetchAreas]);
+  useEffect(() => {
+    fetchAreas();
+    const intervalId = setInterval(fetchAreas, 3000);
+    return () => clearInterval(intervalId);
+  }, [fetchAreas]);
 
   // When campus is selected, auto-fetch predictions for all areas in that campus
   useEffect(() => {
@@ -243,7 +270,7 @@ export default function PredictionScreen() {
               : statusText(area.status_label);
             const spots = pred
               ? pred.predicted_available_slots
-              : area.available_slots;
+              : getAreaAvailability(area).available;
             const icon = pred
               ? statusIcon(pred.predicted_status_label)
               : statusIcon(area.status_label);
