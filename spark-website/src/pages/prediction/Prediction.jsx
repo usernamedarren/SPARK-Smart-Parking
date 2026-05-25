@@ -27,7 +27,7 @@ export default function Prediction() {
     Jatinangor: ['GKU 1', 'GKU 2', 'GKU 3', 'REKTORAT']
   };
 
-  useEffect(() => {
+useEffect(() => {
     const fetchRecommendations = async () => {
       if (!targetBuilding) {
         setRecommendations([]);
@@ -36,31 +36,21 @@ export default function Prediction() {
 
       setLoading(true);
       try {
-        // Opsi 1: Panggil backend (rekomendasi sudah disortir dari backend)
-        const res = await api.get('/recommendation', {
-          params: { destination: targetBuilding, top_n: 3 }
-        });
-        
-        if (res.data?.recommendations) {
-          setRecommendations(res.data.recommendations.map(item => ({
-            name: item.area_name,
-            spots: item.available_slots,
-            total: item.total_slots,
-            walk: `${Math.round(item.estimated_walk_minutes || 3)} min walk`,
-            status: item.status_label
-          })));
-        }
-      } catch (err) {
-        console.warn("API rekomendasi gagal, menjalankan fallback lokal...");
-        
-        // Opsi 2: Fallback logika lokal (Haversine & Availability)
         const statusRes = await api.get('/parking/status');
         const allAreas = Array.isArray(statusRes.data) ? statusRes.data : [];
         
-        // Kita perlu koordinat gedung tujuan (hardcoded koordinat gedung ITB untuk kalkulasi jarak)
-        const buildingCoords = { 'LABTEK 5': [-6.891, 107.610], 'LABTEK 8': [-6.892, 107.611], /* dll... */ };
-        const targetCoord = buildingCoords[targetBuilding] || [-6.8915, 107.6107];
+        // 1. Koordinat Gedung (Pastikan koordinat ini akurat untuk perhitungan jarak)
+        const buildingCoords = { 
+            'LABTEK 5': [-6.8915, 107.6105], 'LABTEK 8': [-6.8920, 107.6110], 
+            'FSRD': [-6.890, 107.610], 'GKUB': [-6.893, 107.612],
+            'GKUT': [-6.894, 107.613], 'CADL': [-6.890, 107.611],
+            'ALBAR': [-6.895, 107.614], 'ALTIM': [-6.896, 107.615],
+            'GKU 1': [-6.927, 107.774], 'GKU 2': [-6.928, 107.775],
+            'GKU 3': [-6.929, 107.776], 'REKTORAT': [-6.926, 107.773]
+        };
+        const targetCoord = buildingCoords[targetBuilding] || (campus === 'Ganesha' ? [-6.8915, 107.6107] : [-6.9275, 107.7740]);
 
+        // 2. Filter, Map Jarak, dan SORTING SEMUA AREA
         const sorted = allAreas
           .filter(a => (campus === 'Ganesha' ? a.latitude > -6.92 : a.latitude <= -6.92))
           .map(a => ({
@@ -68,19 +58,28 @@ export default function Prediction() {
             dist: haversineDistance(a.latitude, a.longitude, targetCoord[0], targetCoord[1])
           }))
           .sort((a, b) => {
-            // Logika Sort: 1. Prioritas yang tersedia, 2. Jarak terdekat
+            // Logika Skor:
+            // A. Area dengan slot tersedia (available_slots > 0) selalu lebih baik daripada Full
             if (a.available_slots > 0 && b.available_slots === 0) return -1;
             if (a.available_slots === 0 && b.available_slots > 0) return 1;
+            
+            // B. Jika keduanya tersedia atau keduanya full, urutkan berdasarkan jarak terdekat (dist)
+            // Jarak yang lebih kecil (dekat) mendapat prioritas
             return a.dist - b.dist;
           });
 
-        setRecommendations(sorted.slice(0, 3).map(a => ({
+        // 3. Mapping hasil ke state tanpa .slice() (semua wilayah tampil)
+        setRecommendations(sorted.map(a => ({
           name: a.name,
           spots: a.available_slots,
           total: a.total_slots,
+          // Durasi jalan kaki estimasi: rata-rata kecepatan orang jalan 5km/jam (atau 1km per 12 menit)
           walk: `${Math.max(1, Math.round(a.dist * 12))} min walk`,
           status: a.status_label
         })));
+        
+      } catch (err) {
+        console.error("Gagal memuat rekomendasi:", err);
       } finally {
         setLoading(false);
       }
