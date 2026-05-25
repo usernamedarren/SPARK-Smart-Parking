@@ -55,6 +55,22 @@ function normalizeName(value: string): string {
   return String(value || "").trim().toLowerCase();
 }
 
+function isAreaInCampus(area: ParkingAreaWithStatus, campus: string): boolean {
+  return campus === "Ganesha" ? area.latitude > -6.92 : area.latitude <= -6.92;
+}
+
+function sortByAvailabilityThenDistance<T extends { available_slots: number; distance_km: number; area_name: string }>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const availabilityDiff = Number(a.available_slots === 0) - Number(b.available_slots === 0);
+    if (availabilityDiff !== 0) return availabilityDiff;
+
+    const distanceDiff = a.distance_km - b.distance_km;
+    if (distanceDiff !== 0) return distanceDiff;
+
+    return a.area_name.localeCompare(b.area_name);
+  });
+}
+
 function getAreaAvailability(area: ParkingAreaWithStatus): { available: number; total: number } {
   const slotStatus = area.slot_status;
   if (!slotStatus || Object.keys(slotStatus).length === 0) {
@@ -132,15 +148,26 @@ export default function PredictionScreen() {
       setRecommendationError("");
 
       try {
-        const res = await getRecommendations(selectedBuilding, 5);
-        setRecommendations(res.recommendations || []);
+        const res = await getRecommendations(selectedBuilding, 20);
+        const campusRecommendations = (res.recommendations || [])
+          .filter((recommendation: RecommendationItem) => {
+            const matchingArea = areas.find(
+              (area) => normalizeName(area.name) === normalizeName(recommendation.area_name)
+            );
+
+            if (!matchingArea) {
+              return true;
+            }
+
+            return isAreaInCampus(matchingArea, selectedCampus);
+          });
+
+        setRecommendations(sortByAvailabilityThenDistance(campusRecommendations).slice(0, 5));
       } catch (e) {
         console.error("PredictionScreen recommendation error:", e);
 
         try {
-          const campusAreas = selectedCampus === "Ganesha"
-            ? areas.filter((a: ParkingAreaWithStatus) => a.latitude > -6.92)
-            : areas.filter((a: ParkingAreaWithStatus) => a.latitude <= -6.92);
+          const campusAreas = areas.filter((a: ParkingAreaWithStatus) => isAreaInCampus(a, selectedCampus));
 
           const selectedArea = campusAreas.find(
             (area: ParkingAreaWithStatus) =>
@@ -157,26 +184,21 @@ export default function PredictionScreen() {
             );
           };
 
-          const availableFirst = campusAreas.filter(
-            (area: ParkingAreaWithStatus) => getAreaAvailability(area).available > 0
-          );
-          const fallbackPool = availableFirst.length > 0 ? availableFirst : campusAreas;
-
-          const fallbackRecommendations = [...fallbackPool]
+          const fallbackRecommendations = [...campusAreas]
             .sort((a, b) => {
+              const aAvailable = getAreaAvailability(a).available > 0 ? 0 : 1;
+              const bAvailable = getAreaAvailability(b).available > 0 ? 0 : 1;
+              if (aAvailable !== bAvailable) {
+                return aAvailable - bAvailable;
+              }
+
               const distanceDiff = distanceFromDestination(a) - distanceFromDestination(b);
               if (distanceDiff !== 0) return distanceDiff;
-
-              const aAvailability = getAreaAvailability(a).available;
-              const bAvailability = getAreaAvailability(b).available;
-              if (bAvailability !== aAvailability) {
-                return bAvailability - aAvailability;
-              }
 
               return a.name.localeCompare(b.name);
             })
             .slice(0, 5)
-            .map((area) => {
+            .map((area: ParkingAreaWithStatus) => {
               const counts = getAreaAvailability(area);
               const distanceKm = distanceFromDestination(area);
               const walkMinutes = distanceKm === Number.MAX_SAFE_INTEGER
@@ -363,7 +385,7 @@ export default function PredictionScreen() {
               </Text>
             </View>
           ) : (
-            recommendations.map((rec) => {
+            recommendations.map((rec: RecommendationItem) => {
               const color = statusColor(rec.status_label);
               const status = statusText(rec.status_label);
 

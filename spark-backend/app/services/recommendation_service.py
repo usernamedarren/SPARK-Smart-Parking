@@ -141,9 +141,14 @@ class RecommendationService:
                 "score": round(score, 4),
             })
 
-        available_recommendations = [item for item in recommendations if item["available_slots"] > 0]
-        ranked = available_recommendations if available_recommendations else recommendations
-        ranked.sort(key=lambda x: (x["distance_km"], -x["available_slots"], x["area_name"]))
+        ranked = sorted(
+            recommendations,
+            key=lambda item: (
+                0 if item["available_slots"] > 0 else 1,
+                item["distance_km"],
+                item["area_name"],
+            ),
+        )
 
         return {
             "destination": building.get("name", destination),
