@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Base URL akan mengarah ke server Railway atau localhost backend kamu
 const api = axios.create({
-  baseURL: 'http://localhost:8000', // Ganti dengan URL backend jika sudah di-deploy
+  baseURL: 'https://prowling-unkind-arbitrate.ngrok-free.dev', // Ganti dengan URL backend jika sudah di-deploy
   headers: {
     'Content-Type': 'application/json',
   },
