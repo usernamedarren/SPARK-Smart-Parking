@@ -7,7 +7,7 @@ import {
   Image,
   ScrollView,
   Modal,
-  TextInput,
+  TextInput, 
   Alert,
   ActivityIndicator,
 } from "react-native";
