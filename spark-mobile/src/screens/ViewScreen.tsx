@@ -56,6 +56,7 @@ export default function ViewScreen() {
   const [selectedLocation, setSelectedLocation] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [snapshotTick, setSnapshotTick] = useState(0);
 
   // Fetch data
   const fetchData = useCallback(async () => {
@@ -63,7 +64,10 @@ export default function ViewScreen() {
       const data = await getParkingAreas();
       setAreas(data);
       if (data.length > 0 && !selectedLocation) {
-        setSelectedLocation(data[0].name);
+        const defaultArea = data.find(
+          (area) => area.name.trim().toLowerCase() === "labtek 5"
+        );
+        setSelectedLocation((defaultArea || data[0]).name);
       }
     } catch (e) {
       console.error("ViewScreen fetch error:", e);
@@ -75,8 +79,22 @@ export default function ViewScreen() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  useEffect(() => {
+    setSnapshotTick((prev) => prev + 1);
+  }, [selectedLocation]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setSnapshotTick((prev) => prev + 1);
+      fetchData();
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [fetchData]);
+
   const onRefresh = () => {
     setRefreshing(true);
+    setSnapshotTick((prev) => prev + 1);
     fetchData();
   };
 
@@ -95,7 +113,7 @@ export default function ViewScreen() {
   // Selected area details
   const selectedArea = areas.find((a) => a.name === selectedLocation);
   const snapshotUrl = selectedArea?.camera_device_id
-    ? getSnapshotUrl(selectedArea.camera_device_id)
+    ? `${getSnapshotUrl(selectedArea.camera_device_id)}?t=${snapshotTick}`
     : null;
 
   // Last updated timestamp
@@ -209,12 +227,6 @@ export default function ViewScreen() {
               {selectedLocation}
             </Text>
           </Text>
-
-          <TouchableOpacity onPress={onRefresh}>
-            <Text style={styles.refresh}>
-              ↻ Refresh Feed
-            </Text>
-          </TouchableOpacity>
         </View>
       </View>
 
