@@ -86,7 +86,6 @@ export default function Map() {
 
   // --------------------------------------------------------------------------------
   // CONFIG VISUAL MAPPING (SINKRONISASI POSISI KAMERA DAN DENAH)
-  // Ubah 'dbKey' jika posisi di kamera terbalik dengan layout visual map ini!
   // --------------------------------------------------------------------------------
   const leftSlots = [
     { id: 'A', dbKey: 'slot_1' },
@@ -121,8 +120,15 @@ export default function Map() {
   // Komponen Helper untuk me-render satu slot parkir
   const ParkingSpot = ({ spot, side }) => {
     const isOccupied = checkIsOccupied(spot.dbKey);
-    // Putar mobil agar menghadap ke jalan tengah (asumsi car-top-view.png menghadap atas/bawah)
-    const carRotation = side === 'left' ? 'rotate-90' : '-rotate-90';
+
+    // ----------------------------------------------------------------------
+    // PERBAIKAN: Rotasi Mobil 90 Derajat agar sejajar jalan (menghadap atas/bawah)
+    // Asumsi file 'car-top-view.png' aslinya menghadap ke ATAS/UTARA.
+    // ----------------------------------------------------------------------
+    
+    // Mobil di sisi kiri menghadap ke atas (0 derajat)
+    // Mobil di sisi kanan diputar 180 derajat menghadap ke bawah agar realistis
+    const carRotation = side === 'left' ? 'rotate-0' : 'rotate-180';
 
     return (
       <div 
@@ -134,6 +140,7 @@ export default function Map() {
           <img 
             src="/car-top-view.png" 
             alt="Occupied Spot" 
+            // Tailwind class transform dan rotation diterapkan di sini
             className={`h-16 w-auto object-contain opacity-90 drop-shadow-md transform ${carRotation}`} 
           />
         ) : (
@@ -200,6 +207,11 @@ export default function Map() {
                 {leftSlots.map((spot) => (
                   <ParkingSpot key={spot.id} spot={spot} side="left" />
                 ))}
+              </div>
+
+              {/* Indikator Area Berkendara Tengah */}
+              <div className="w-[16%] flex flex-col items-center justify-center z-10 opacity-30">
+                <span className="text-gray-500 font-black tracking-[0.3em] rotate-90 text-sm uppercase">Driveway</span>
               </div>
 
               {/* Blok Kanan (Slot G-L) */}
