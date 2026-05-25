@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import CampusMap from '../../components/CampusMap'; // Sinkronisasi peta Leaflet interaktif
+import CampusMap from '../../components/CampusMap'; 
 import api from '../../services/api';
 
 export default function Map() {
@@ -9,11 +9,11 @@ export default function Map() {
   const [areas, setAreas] = useState([]);
   const [currentArea, setCurrentArea] = useState(null);
   const [parkingSpots, setParkingSpots] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [activeCampus, setActiveCampus] = useState('Ganesha');
   const [aiPrediction, setAiPrediction] = useState('Generating live AI analysis...');
   const [predicting, setPredicting] = useState(false);
 
-  // Fetch semua area parkir
+  // Fetch status berkala setiap 5 detik agar sinkron penuh dengan visualisasi livecam
   useEffect(() => {
     const fetchStatus = async () => {
       try {
@@ -21,44 +21,62 @@ export default function Map() {
         const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
         setAreas(data);
       } catch (err) {
-        console.error('Gagal mengambil data map:', err);
-      } finally {
-        setLoading(false);
+        console.error('Gagal mengambil data koordinat map:', err);
       }
     };
     fetchStatus();
-    const interval = setInterval(fetchStatus, 15000);
+    const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  // Update lokasi jika diarahkan dari halaman lain
+  // Sinkronisasi navigasi antar-halaman internal
   useEffect(() => {
     if (location.state?.selectedLocation) {
-      setCurrentLocation(location.state.selectedLocation);
+      const locName = location.state.selectedLocation;
+      setCurrentLocation(locName);
+      
+      const jatinangorList = ['GKU 1', 'GKU 2', 'GKU 3', 'REKTORAT'];
+      if (jatinangorList.includes(locName.toUpperCase())) {
+        setActiveCampus('Jatinangor');
+      } else {
+        setActiveCampus('Ganesha');
+      }
     }
   }, [location.state]);
 
-  // Cari area aktif berdasarkan nama
+  // Pemetaan segmentasi slot fisik biner dari data AI backend
   useEffect(() => {
     const found = areas.find(a => a.name.toUpperCase() === currentLocation.toUpperCase());
     if (found) {
       setCurrentArea(found);
-      
-      // Hasilkan slot parkir dinamis sesuai total_slots dan occupied_slots
       const spots = [];
       const labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
       const total = found.total_slots || 10;
       const occupied = found.occupied_slots || 0;
+      const slotStatusMap = found.slot_status || {};
+
+      const resolveOccupied = (slotIndex, fallback) => {
+        const statusKey = `slot_${slotIndex + 1}`;
+        const raw = slotStatusMap[statusKey];
+        if (typeof raw === "boolean") return raw;
+        if (typeof raw === "string") {
+          const value = raw.toLowerCase();
+          if (value === "empty" || value === "available") return false;
+          return value === "occupied" || value === "full";
+        }
+        return fallback;
+      };
+
       for (let i = 0; i < Math.min(total, 26); i++) {
         spots.push({
           id: labels[i],
-          status: i < occupied ? 'occupied' : 'available'
+          status: resolveOccupied(i, i < occupied) ? 'occupied' : 'available',
         });
       }
       setParkingSpots(spots);
     } else {
-      // Fallback jika area tidak ditemukan dalam database
       setCurrentArea(null);
+      // Fallback lokal apabila koneksi basis data terputus
       setParkingSpots([
         { id: 'A', status: 'available' },
         { id: 'B', status: 'occupied' },
@@ -70,30 +88,22 @@ export default function Map() {
     }
   }, [currentLocation, areas]);
 
-  // Panggil endpoint prediksi atau gunakan kalkulasi AI lokal jika tidak terautentikasi
+  // Polling AI untuk memprediksi tren okupansi masa depan
   useEffect(() => {
     if (!currentArea) return;
-
     const fetchPrediction = async () => {
       setPredicting(true);
       try {
         const arrivalTime = new Date();
-        arrivalTime.setMinutes(arrivalTime.getMinutes() + 45); // Prediksi 45 menit ke depan
-        
-        // Panggil endpoint prediksi (dapat gagal jika butuh auth penuh)
+        arrivalTime.setMinutes(arrivalTime.getMinutes() + 45);
         const res = await api.get('/prediction', {
-          params: {
-            area_id: currentArea.id,
-            arrival_time: arrivalTime.toISOString()
-          }
+          params: { area_id: currentArea.id, arrival_time: arrivalTime.toISOString() }
         });
-        
         if (res.data) {
           const confidence = Math.round((res.data.confidence || 0.85) * 100);
           setAiPrediction(`Predicted availability: ${res.data.predicted_available_slots} slots (${res.data.predicted_occupancy_rate * 100}% occupancy). Confidence level: ${confidence}%.`);
         }
       } catch (err) {
-        // Fallback analitis cerdas jika gagal / butuh login
         const rate = currentArea.occupancy_rate || 0.5;
         if (rate > 0.8) {
           setAiPrediction(`Highly congested area. AI predicts slots will remain critical (<15% availability) for the next 45 minutes. Recommend heading to alternative spots.`);
@@ -106,38 +116,49 @@ export default function Map() {
         setPredicting(false);
       }
     };
-
     fetchPrediction();
   }, [currentArea]);
 
-  // Logika penentuan fokus peta kampus
-  const jatinangorLocations = ['GKU 1', 'GKU 2', 'GKU 3', 'REKTORAT'];
-  const mapFocusCampus = jatinangorLocations.includes(currentLocation) ? 'Jatinangor' : 'Ganesha';
+  const handleCampusToggle = (campus) => {
+    setActiveCampus(campus);
+    // Auto select lokasi default saat berganti klaster kampus di peta
+    setCurrentLocation(campus === 'Ganesha' ? 'LABTEK 5' : 'GKU 1');
+  };
 
   return (
     <div className="flex flex-col h-full gap-4 relative">
-      
-      {/* Title Halaman Melayang di Pojok Kanan Atas */}
       <div className="absolute top-0 right-4 z-10">
         <h2 className="text-3xl font-extrabold text-[#C82A2A]">Map</h2>
       </div>
 
       <div className="flex-1 flex gap-6 min-h-0 z-0">
-        
-        {/* Main Map Visual (Left Side) */}
+        {/* Kiri: Interactive Map Component dengan Pilihan Kampus */}
         <div className="flex-[3] bg-white border border-red-200 rounded-3xl relative overflow-hidden shadow-xs z-0">
-          
-          {/* Implementasi Peta Leaflet Asli */}
           <div className="absolute inset-0 w-full h-full z-0 opacity-80">
-            <CampusMap campus={mapFocusCampus} />
+            <CampusMap campus={activeCampus} />
           </div>
 
-          <div className="absolute top-6 left-6 bg-[#3A5A40] text-white px-5 py-2 rounded-full text-xs font-bold shadow-md z-10 flex items-center gap-2">
-            <span className="text-base leading-none">📍</span> Current Selection: {currentLocation}
+          {/* Sakelar Peta Kampus Berbasis Desain Utama */}
+          <div className="absolute inset-x-4 top-4 flex gap-2 z-10">
+            {['Ganesha', 'Jatinangor'].map((campus) => (
+              <button
+                key={campus}
+                onClick={() => handleCampusToggle(campus)}
+                className={`px-5 py-2 rounded-full font-bold text-xs shadow-md transition ${
+                  activeCampus === campus ? 'bg-[#3A5A40] text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                📍 ITB {campus}
+              </button>
+            ))}
+          </div>
+
+          <div className="absolute bottom-4 left-4 bg-[#3A5A40] text-white px-5 py-2 rounded-full text-xs font-bold shadow-md z-10 flex items-center gap-2">
+            <span>📍</span> Focused: {currentLocation}
           </div>
         </div>
 
-        {/* Slot Grid Allocation Side Panel (Right Side) */}
+        {/* Kanan: Real-Time Slot Diagram Grid */}
         <div className="flex-[2] flex flex-col gap-4 z-10 pr-2">
           <div className="bg-white border border-red-100 rounded-3xl p-5 shadow-xs flex-1 flex flex-col min-h-0">
             <div className="flex items-center gap-3 mb-5">
@@ -145,45 +166,28 @@ export default function Map() {
               <h3 className="font-extrabold text-gray-800 text-base uppercase tracking-wide">{currentLocation}</h3>
             </div>
             
-            {/* 2. TAMPILAN GRID SLOT DINAMIS MENGGUNAKAN MAP & KONDISI */}
             <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-3 content-start overflow-y-auto pr-1">
-              
               {parkingSpots.map((spot) => (
                 <div 
                   key={spot.id}
-                  // Styling wadah luar disesuaikan berdasarkan status
                   className={`rounded-xl p-2 flex flex-col justify-center items-center shadow-inner min-h-[80px] transition-colors ${
-                    spot.status === 'occupied'
-                      ? 'bg-gray-100 border border-gray-200' // Styling Penuh
-                      : 'border border-green-200 bg-[#F4F9F5] shadow-xs' // Styling Kosong
+                    spot.status === 'occupied' ? 'bg-gray-100 border border-gray-200' : 'border border-green-200 bg-[#F4F9F5] shadow-xs'
                   }`}
                 >
-                  {/* LOGIKA KONDISIONAL: MOBIL ATAU TULISAN AVAILABLE */}
                   {spot.status === 'occupied' ? (
-                    // JIKA PENUH/ADA MOBIL: Tampilkan GAMBAR MOBIL
-                    <img 
-                      src="/car-top-view.png" // Mengambil dari folder public/
-                      alt="Occupied" 
-                      className="h-14 w-auto object-contain opacity-90" 
-                    />
+                    <img src="/car-top-view.png" alt="Occupied Spot" className="h-14 w-auto object-contain opacity-90" />
                   ) : (
-                    // JIKA KOSONG: Tampilkan Huruf Blok & Tulisan AVAILABLE
                     <>
-                      <span className="font-bold text-[#3A5A40] block text-xl mb-0.5 leading-none">
-                        {spot.id}
-                      </span>
-                      <span className="text-[9px] uppercase font-bold tracking-wider text-[#3A5A40] mt-1">
-                        Available
-                      </span>
+                      <span className="font-bold text-[#3A5A40] block text-xl mb-0.5 leading-none">{spot.id}</span>
+                      <span className="text-[9px] uppercase font-bold tracking-wider text-[#3A5A40] mt-1">Available</span>
                     </>
                   )}
                 </div>
               ))}
-
             </div>
           </div>
 
-          {/* AI Prediction Box */}
+          {/* AI Analysis Prediction Box */}
           <div className="bg-gradient-to-r from-red-50 to-white border border-red-100 rounded-2xl p-4 shadow-xs">
             <h4 className="font-bold text-red-600 text-xs mb-1.5 flex items-center gap-1.5">
                <span className="text-sm">✨</span> AI Analysis Prediction
@@ -193,7 +197,6 @@ export default function Map() {
             </p>
           </div>
         </div>
-
       </div>
 
       {/* Legend Footer */}
